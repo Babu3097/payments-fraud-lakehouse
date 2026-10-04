@@ -106,6 +106,22 @@ makes it stick for interviews.
 - The pipeline event log records each update's states and the expectation metrics (passed and
   failed counts), which is where a runbook starts.
 
+### Incremental, idempotent and exactly once
+- Run A had no new files and added 0 rows in 25 s; PaySim's 493 MB flow finished in under a second
+  because the checkpoint already knew that file. Run B read only the three new files.
+- A late file (25 Sep, delivered after 26 and 27 Sep) is ingested normally, because Auto Loader goes
+  by arrival and not by file name or date.
+- Even though an update was interrupted, every day has exactly 40,400 rows: no duplicates.
+
+### Schema evolution
+- When the new `channel` column appeared, Auto Loader stopped the update and the platform started a
+  new one itself (cause `SCHEMA_CHANGE`). Old rows keep an empty `channel`. A value that conflicts
+  with a declared type goes to `_rescued_data` instead.
+- A job that runs the pipeline could report "cancelled" for that first update even though the data
+  completed, so a job needs a retry (Phase 5).
+- I predicted the update would stop and need a manual rerun. Half right: it stopped, but it restarted
+  itself. Writing a prediction down first made the difference obvious.
+
 ### Reconciliation
 - 18 SQL checks compare every bronze table with the files that fed it and with the generator's
   manifests. Counts are not enough, so I also checked values: the numbers written in scientific

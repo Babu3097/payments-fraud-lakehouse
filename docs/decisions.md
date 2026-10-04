@@ -133,6 +133,22 @@ bottom. Status is one of: Accepted, Open, Superseded.
   this record would have to change. Typing at bronze means a bad value is rescued and not kept as
   raw text, which is acceptable because the original file always stays in the landing volume.
 
+## ADR-012: Schema evolution: accept new columns, rescue conflicts, let the platform restart
+
+- **Status:** Accepted (observed 2026-10-04); the Phase 5 consequence is still to verify
+- **Decision:** Auto Loader runs with `addNewColumns`, so an extra column in the daily feed is
+  added to the table. A value that conflicts with a declared type is rescued into `_rescued_data`.
+  Loaders only read files that match their extension (`*.jsonl`, `*.csv`, `*.json`).
+- **Why:** An added column is a non-breaking change, so ingestion must not need a human. We watched
+  it happen when `channel` appeared on 28 September: Auto Loader stopped the update, the platform
+  cancelled it and started a new update itself (cause `SCHEMA_CHANGE`, 19 seconds), and every row
+  landed exactly once (14 days of 40,400 rows, no duplicates, no rescues). The extension filter stops
+  a temp or stray file from being read as data.
+- **Trade-offs:** The first update after a new column is reported as cancelled, so a scheduled job
+  could look failed although the data completed. Phase 5 adds a job retry and we test it. Silver
+  does not pick up a new column automatically: it selects columns explicitly, so a column becomes
+  visible downstream only by a deliberate change.
+
 ## ADR-010: A deterministic generator with a manifest as ground truth
 
 - **Status:** Accepted

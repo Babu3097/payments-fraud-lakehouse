@@ -20,6 +20,7 @@ def bank_holidays_raw():
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "text")
         .option("wholeText", "true")
+        .option("pathGlobFilter", "*.json")  # skips the .tmp file used while a pull is landing
         .load(LANDING)
         .select(
             F.col("value").alias("payload"),

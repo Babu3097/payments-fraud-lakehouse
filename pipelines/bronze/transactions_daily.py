@@ -29,6 +29,7 @@ def transactions_daily():
     return (
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "json")
+        .option("pathGlobFilter", "*.jsonl")  # only real data files, never temp or stray files
         .option("cloudFiles.schemaHints", HINTS)
         .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
         .load(LANDING)

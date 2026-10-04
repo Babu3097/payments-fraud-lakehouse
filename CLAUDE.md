@@ -97,6 +97,11 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   `sql/checks/bronze_reconciliation.sql` passes 18 of 18 and the expectation metrics show 0 failed.
   Gotcha: the pipeline `libraries.glob` must be a plain `**` (the API rejects `**/*.py`), and
   `bundle validate` cannot catch server-side rules like that.
-  Next: prove incrementality and idempotency (rerun with no new files, batch 2, then batch 3 with
-  the late file and the `channel` schema change), runbook entries, Phase 2 interview questions.
+  Incremental proof done (2026-10-04): run A (nothing new) added 0 rows in 25 s; run B added
+  121,200 transaction and 975 profile rows; run C met the late 25 Sep file and the new `channel`
+  column: the update was cancelled and the platform restarted it itself (cause SCHEMA_CHANGE,
+  19 s), giving 14 days x 40,400 rows exactly once, 18 of 18 checks passing (ADR-012, runbook).
+  Written locally but not yet deployed: `pathGlobFilter` on the four loaders.
+  Next: deploy that hardening and rerun (expect 0 new rows), push the branch and open the PR
+  (ask first), Phase 2 interview questions, then wait for the user's OK before Phase 3.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.

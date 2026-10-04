@@ -25,6 +25,7 @@ def customer_profile_changes():
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "csv")
         .option("header", "true")
+        .option("pathGlobFilter", "*.csv")  # only real data files, never temp or stray files
         .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss'Z'")
         .option("timeZone", "UTC")
         .schema(SCHEMA)

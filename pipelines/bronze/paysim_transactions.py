@@ -30,6 +30,7 @@ def paysim_transactions():
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "csv")
         .option("header", "true")
+        .option("pathGlobFilter", "*.csv")  # only real data files, never temp or stray files
         .schema(SCHEMA)
         .load(LANDING)
         .select(
