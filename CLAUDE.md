@@ -104,4 +104,11 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   Written locally but not yet deployed: `pathGlobFilter` on the four loaders.
   Next: deploy that hardening and rerun (expect 0 new rows), push the branch and open the PR
   (ask first), Phase 2 interview questions, then wait for the user's OK before Phase 3.
+- **Phase 2 (done, merged in PR 1):** see above. Bronze is deployed and verified.
+- **Phase 3 (in progress, branch `phase-3-silver`):** decisions in ADR-013 to ADR-015. Written and
+  lint-clean, not yet deployed: `pipelines/silver/` (`transactions_unified` private working table
+  with two flows, `transactions` via Auto CDC SCD1, `transactions_quarantine`,
+  `customer_profile_events`, `bank_holidays`) and `sql/checks/silver_reconciliation.sql`.
+  Predictions to verify: silver 6,916,460 rows, quarantine 6,160, duplicates removed 5,600,
+  holidays 280. Next: deploy, dry-run validate, run, verify against the manifests.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.
