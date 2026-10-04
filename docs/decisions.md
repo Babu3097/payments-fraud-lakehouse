@@ -117,6 +117,22 @@ bottom. Status is one of: Accepted, Open, Superseded.
 - **Trade-offs:** If Databricks tightens the allow-list the pull would have to move outside the
   workspace. A single pipeline would need splitting if the project outgrew Free Edition.
 
+## ADR-011: Bronze data contract: money as DECIMAL(18,2), strict where the source is trusted
+
+- **Status:** Accepted
+- **Decision:** Money columns are `DECIMAL(18,2)`. Bronze tables are typed by an explicit contract
+  where the source guarantees its types (PaySim, the customer feed). Where defects are expected,
+  the risky column stays a string for silver to parse (`event_ts` in the daily transactions). New
+  columns are accepted when they appear (`addNewColumns`), and anything that conflicts with a
+  declared type lands in `_rescued_data`. A warn-only expectation, `no_contract_violations`,
+  counts those rescues without dropping rows.
+- **Why:** Floating point cannot represent money exactly. We checked the real PaySim file rather
+  than assume: none of 6,362,620 rows in any of the five money columns has digits beyond two decimal
+  places, so the conversion is lossless, and the largest balance (356,179,278.92) fits easily.
+- **Trade-offs:** A source that later sends more precision would be rounded, so the contract and
+  this record would have to change. Typing at bronze means a bad value is rescued and not kept as
+  raw text, which is acceptable because the original file always stays in the landing volume.
+
 ## ADR-010: A deterministic generator with a manifest as ground truth
 
 - **Status:** Accepted

@@ -45,6 +45,7 @@ Totals: **6,362,620 rows**, 11 columns, 0 malformed rows, 0 blank values, 0 unpa
 | 7 | **Almost every customer transacts once** (6.35M originators for 6.36M rows). | Per-customer activity flags need the generator's persistent population. Covering every PaySim ID in the SCD2 dimension means about 9.07M members (decided at the generator step). |
 | 8 | **Type names use underscores** (`CASH_OUT`), unlike the dataset page text. | The data contract uses underscores. |
 | 9 | **Balance columns are unreliable for fraud signals.** The dataset notes say detected fraud is cancelled, and 4,076 of 8,213 fraud rows have both destination balances at 0. | Balances are context only, never features. |
+| 10 | **Numbers of 10 million or more are written in scientific notation** (for example `1.010284203E7`), from 5,650 amounts up to 145,092 `newbalanceOrig` values. | The CSV reader must accept them. Money is `DECIMAL(18,2)` because no value has digits beyond two decimal places: 0 lossy values across 6,362,620 rows in all five money columns (ADR-011). |
 
 Rows per hour of day: near zero from 01:00 to 05:59, peaking at 17:00 to 19:59, while fraud is flat
 across hours. The fraud rate is therefore highest overnight, partly an artifact.

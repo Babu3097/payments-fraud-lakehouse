@@ -1,0 +1,14 @@
+# One Lakeflow pipeline for all layers: Free Edition allows a single active pipeline per type
+# (ADR-009). Datasets use fully qualified names, so each lands in its own schema.
+resources:
+  pipelines:
+    payments_pipeline:
+      name: payments_lakehouse_pipeline
+      catalog: ${var.catalog}
+      schema: bronze # default only; every dataset names its own schema
+      serverless: true
+      continuous: false # triggered runs: process the new files, then stop
+      root_path: ../pipelines
+      libraries:
+        - glob:
+            include: ../pipelines/**/*.py
