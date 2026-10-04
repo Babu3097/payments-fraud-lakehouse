@@ -9,6 +9,8 @@ resources:
       serverless: true
       continuous: false # triggered runs: process the new files, then stop
       root_path: ../pipelines
+      # The API only accepts a plain `**` here (no `**/*.py`). One line per layer folder, so the
+      # README in pipelines/ is never treated as pipeline code. Silver and gold lines come later.
       libraries:
         - glob:
-            include: ../pipelines/**/*.py
+            include: ../pipelines/bronze/**

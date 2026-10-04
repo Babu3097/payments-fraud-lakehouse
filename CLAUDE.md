@@ -91,6 +91,12 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   rows a day with documented defects, `channel` field from 2026-09-28.
   Upload plan: batch 1 (20 to 23 Sep), batch 2 (24, 26, 27 Sep, skipping 25), batch 3 (the late
   25 Sep file plus 28 Sep onwards), so the pipeline meets late data and the schema change.
-  Next: bank-holidays pull job, minimal bundle, Auto Loader bronze pipeline, incremental and
-  idempotency proof, reconcile bronze counts to the source files and manifests.
+  First cycle done (2026-10-04): bundle deployed to the dev target (pipeline
+  `payments_lakehouse_pipeline`, job `pull_bank_holidays`); the holidays job landed its file in 34 s;
+  batch 1 uploaded; the first pipeline update COMPLETED in 97 s (PaySim 6.36M rows in about 21 s);
+  `sql/checks/bronze_reconciliation.sql` passes 18 of 18 and the expectation metrics show 0 failed.
+  Gotcha: the pipeline `libraries.glob` must be a plain `**` (the API rejects `**/*.py`), and
+  `bundle validate` cannot catch server-side rules like that.
+  Next: prove incrementality and idempotency (rerun with no new files, batch 2, then batch 3 with
+  the late file and the `channel` schema change), runbook entries, Phase 2 interview questions.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.

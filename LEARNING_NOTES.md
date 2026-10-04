@@ -89,6 +89,28 @@ makes it stick for interviews.
   provable: silver's quarantine count has to equal the manifest.
 - A deliberate schema change (a new `channel` field from 28 Sep) is how I test schema evolution.
 
+### Asset Bundles
+- A bundle is YAML saying which resources should exist (a pipeline, a job) plus the code they run.
+  `databricks bundle deploy` makes the workspace match the files and remembers what it created.
+  The `dev` target prefixes names with `[dev me]`, so experiments cannot collide with production.
+- `bundle validate` only checks the structure. My first deploy created the job but the server
+  rejected the pipeline (a `**/*.py` glob is not allowed, plain `**` is). Deploying again was safe
+  because a deploy is idempotent.
+
+### Auto Loader and streaming tables
+- Auto Loader keeps a checkpoint of which files it has already read, so each update reads only
+  new files. A streaming table is append-only: it adds rows and never rewrites old ones.
+- The first update ingested everything that was already there (6.36M PaySim rows in about 21 s).
+- An explicit schema is the data contract. A value that does not fit lands in `_rescued_data`,
+  and a warn-only expectation counts those rescues without dropping rows.
+- The pipeline event log records each update's states and the expectation metrics (passed and
+  failed counts), which is where a runbook starts.
+
+### Reconciliation
+- 18 SQL checks compare every bronze table with the files that fed it and with the generator's
+  manifests. Counts are not enough, so I also checked values: the numbers written in scientific
+  notation parsed to exactly the right amounts.
+
 ### Testing the tests
 - Passing tests can still be weak. I broke the generator on purpose five ways in a scratch copy and
   confirmed each break was caught by exactly the test meant to catch it.
