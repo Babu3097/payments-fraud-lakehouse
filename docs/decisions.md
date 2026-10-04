@@ -149,6 +149,69 @@ bottom. Status is one of: Accepted, Open, Superseded.
   does not pick up a new column automatically: it selects columns explicitly, so a column becomes
   visible downstream only by a deliberate change.
 
+## ADR-013: Silver deduplicates with Auto CDC (SCD Type 1) keyed on event_id
+
+- **Status:** Accepted (results to verify on the first silver run)
+- **Decision:** `silver.transactions` is an Auto CDC upsert keyed on `event_id`, sequenced by
+  `_ingested_at`, fed only by rows that passed every check.
+- **Why:** An upsert is idempotent: a duplicated or replayed event updates the same row instead of
+  adding one, a duplicate that arrives in a later file is handled too, and no streaming job has to
+  hold all 6.9M keys in state forever. It is also practice for the SCD Type 2 dimension in Phase 4.
+- **Trade-offs:** The table is no longer append-only, so a downstream streaming read would need
+  `skipChangeCommits`; gold reads silver in batch, so this does not bite. Two identical copies
+  share a sequence value, which is harmless because they are identical. A corrected event that
+  reuses its `event_id` overwrites the old row, which is the behaviour we want. Rejected
+  alternatives: a streaming `dropDuplicates` (unbounded state, no corrections) and a materialized
+  view with `ROW_NUMBER` (recomputes the whole dataset on each update).
+
+## ADR-014: Quarantine and expectations policy for silver
+
+- **Status:** Accepted
+- **Decision:** A private working table unifies PaySim and the generated feed and records each
+  row's failed checks as a list of reason codes (`NULL_REQUIRED_FIELD`, `NEGATIVE_AMOUNT`,
+  `UNKNOWN_TYPE`, `BAD_TIMESTAMP`). Rows with an empty list go to `silver.transactions`; the rest go
+  to `silver.transactions_quarantine` with the reasons and their original values. Duplicates are
+  removed, not quarantined, because a duplicate is not a defect in the data. Expectations on the
+  clean table are a safety net: hard invariants use `FAIL UPDATE`, soft checks only measure.
+  The customer profile feed has no injected defects, so it uses expectations only.
+- **Why:** `ON VIOLATION DROP ROW` would lose rows silently, and a quarantine table keeps every
+  rejected row with its reason, so quality is observable and rows can be repaired and replayed. One
+  reason code per defect class lets the counts reconcile with the generator manifests exactly.
+- **Trade-offs:** Each rule is written twice (the split and the safety-net expectation). A hard
+  expectation stops the update, which is right for something that must never reach gold but means
+  a bug in the split blocks the pipeline until fixed. The profile feed has a documented gap: a bad
+  row there would fail the update and not be quarantined.
+
+## ADR-015: Reference-data join in silver, and a fixed UTC time zone
+
+- **Status:** Accepted
+- **Decision:** Each transaction gets `is_bank_holiday` for England and Wales, using a join to
+  `silver.bank_holidays` on one row per date. The pipeline sets `spark.sql.session.timeZone` to
+  UTC.
+- **Why:** The join satisfies the brief and gives silver a ready-to-use flag; the date-level
+  `DISTINCT` guarantees a date with two holiday names can never duplicate a transaction. Event
+  dates come from timestamps, so the time zone must never depend on a default.
+- **Trade-offs:** The flag is England and Wales only, though customers have a region (a possible
+  refinement). Gold's `dim_date` will own the flag for reporting, so silver and gold both carry it.
+  The static side of a stream-static join is read when each micro-batch starts, so a holiday added
+  later does not retroactively change rows already written.
+
+## ADR-016: Every table is replayable from the landing files
+
+- **Status:** Accepted (verified 2026-10-04)
+- **Decision:** The landing volume is the system of record for raw files. Files are never edited or
+  deleted, and every table is a function of them, so any table can be rebuilt with a full refresh.
+- **Evidence:** A full refresh of every table finished in 1 min 45 s. All eight tables came back with
+  identical row counts and identical fingerprints over their business columns, the audit timestamps
+  were new (the rows were really recomputed), and all 43 reconciliation checks passed again.
+- **Why:** If a silver rule has a bug, we fix the rule and rebuild, without refetching any source.
+  That is the practical meaning of "bronze is raw and replayable".
+- **Trade-offs:** A full refresh reprocesses everything and resets streaming state, which is cheap at
+  7 million rows but would not be at billions. Audit columns (`_ingested_at`, `quarantined_at`)
+  change on a rebuild, so they must never be used as business keys. Production would also need a
+  retention policy for the landing files. On a rebuild every file is read at once, so a column added
+  later (`channel`) is known from the start and no schema-change restart happens.
+
 ## ADR-010: A deterministic generator with a manifest as ground truth
 
 - **Status:** Accepted

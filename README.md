@@ -8,7 +8,7 @@ monitoring questions. It uses the public [PaySim](https://www.kaggle.com/dataset
 dataset (synthetic mobile-money transactions with fraud labels), a Python generator that
 produces new daily transaction files, and a UK bank-holiday reference API.
 
-> **Status: work in progress (phases 0 and 1 of 7 complete: tooling, repo skeleton, CI).**
+> **Status: work in progress (phases 0 to 3 of 7 complete: tooling, repo skeleton, bronze, silver).**
 > This README grows with the project. See the [roadmap](#roadmap).
 
 ## Questions it will answer
@@ -61,8 +61,8 @@ logged in [docs/decisions.md](docs/decisions.md).
 
 - [x] Phase 0: tooling and workspace setup
 - [x] Phase 1: repo skeleton, pre-commit, CI
-- [ ] Phase 2: bronze (PaySim, generator, API, Auto Loader)
-- [ ] Phase 3: silver (typing, dedup, expectations, quarantine)
+- [x] Phase 2: bronze (PaySim, generator, API, Auto Loader)
+- [x] Phase 3: silver (typing, dedup, expectations, quarantine)
 - [ ] Phase 4: gold (star schema, SCD2, KPIs, reconciliation)
 - [ ] Phase 5: automation (scheduled job, alerts, Asset Bundle, idempotency)
 - [ ] Phase 6: quality (tests, CI, data quality summary)

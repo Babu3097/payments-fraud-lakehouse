@@ -16,7 +16,9 @@ Each entry follows the same shape: **Symptom, likely causes, how to check, fix, 
 | Scenario | Written in |
 |---|---|
 | Reconciliation check failed (gold totals differ from raw) | Phase 4 |
-| Expectation failures spiked or the quarantine table grew unexpectedly | Phase 3 |
+| The update failed on a hard expectation | Below (Phase 3) |
+| The quarantine table grew unexpectedly | Below (Phase 3) |
+| Fraud events are missing from the KPIs | Below (Phase 3) |
 | Files were uploaded but no new rows appeared | Below (Phase 2) |
 | The update was cancelled after a new column appeared | Below (Phase 2) |
 | The bank holidays pull failed | Below (Phase 2) |
@@ -67,6 +69,42 @@ Each entry follows the same shape: **Symptom, likely causes, how to check, fix, 
   content, so a rerun never duplicates. For a changed shape, inspect the payload first, then update
   `validate()` and silver together. Do not loosen the check blindly.
 - **Impact:** bronze keeps the last calendar that landed, and nothing downstream breaks.
+
+## The update failed on a hard expectation
+
+- **Symptom:** the update FAILED and the event log names an expectation such as `known_type` or
+  `amount_not_negative` on `silver.transactions`.
+- **What it means:** a row that should have been quarantined reached the clean table, so the split in
+  `transactions_unified.sql` has a gap. Hard rules exist to stop that data reaching gold.
+- **Check:** read the failure in the update's events
+  (`databricks api get "/api/2.0/pipelines/<pipeline-id>/events?max_results=50&order_by=timestamp%20desc"`),
+  then look for rows that break the rule in `silver.transactions_unified`.
+- **Fix:** add the missing check to `failed_checks`, redeploy, and rerun. Nothing was written: the
+  update is atomic, so the clean table is untouched.
+- **Prevent:** every hard expectation has a matching reason code, and the reconciliation compares
+  each code with the manifests.
+
+## The quarantine table grew unexpectedly
+
+- **Symptom:** `silver.transactions_quarantine` gained far more rows than usual in one update.
+- **Likely causes:** a source change (a new type value, a different timestamp format, a field that is
+  now null), a wrong rule, or a replayed file whose bad rows are quarantined again.
+- **Check:** count by reason and by day:
+  `SELECT failed_checks[0], left(substring_index(_source_file,'transactions_',-1),10), count(*) FROM workspace.silver.transactions_quarantine GROUP BY 1, 2`.
+  Read a few `raw_record` values. Null fields are shown explicitly as `null`.
+- **Fix:** if the rule is wrong, correct it and refresh the quarantine table with
+  `databricks bundle run payments_pipeline --full-refresh workspace.silver.transactions_quarantine`.
+  If the source is wrong, ask the source team to resend corrected rows as a new file.
+- **Normal level:** about 1.1% of generated rows (440 of 40,000 a day), exactly the injected defects.
+
+## Fraud events are missing from the KPIs
+
+- **Symptom:** the fraud count in gold is lower than the labelled fraud in the source.
+- **Cause:** a fraud event that also has a defect sits in quarantine. In the first 14 days, 17 of
+  1,680 generated fraud rows were quarantined (PaySim's fraud rows are all in silver).
+- **Check:** `SELECT count(*) FROM workspace.silver.transactions_quarantine WHERE get_json_object(raw_record, '$.is_fraud') = 'true'`.
+- **Fix:** repair the rows at the source and resend them as a new file (see docs/silver.md).
+- **Prevent:** alert when quarantined fraud rows are above zero, since each one hides a fraud event.
 
 ## Safe rerun
 

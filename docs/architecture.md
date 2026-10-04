@@ -1,8 +1,9 @@
 # Architecture
 
-> **Status:** the landing zone and bronze are built and verified (Phase 2: four sources, 18
-> reconciliation checks, incremental and schema-change runs proven). Silver, gold and the BI layer
-> are still planned. Updated at the end of each phase.
+> **Status:** the landing zone, bronze and silver are built and verified (Phase 2: four sources,
+> incremental and schema-change runs; Phase 3: unified, deduplicated and quarantined transactions,
+> 43 reconciliation checks, see [silver.md](silver.md)). Gold and the BI layer are still planned.
+> Updated at the end of each phase.
 
 ## Data flow
 
