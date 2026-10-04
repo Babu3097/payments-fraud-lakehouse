@@ -162,3 +162,54 @@ makes it stick for interviews.
   schema string, a deliberate `SELECT *`), so they carry an explained `noqa`.
 - A validate-only update checks the SQL without processing data, which is the cheap way to find mistakes.
 - `to_json` drops null fields by default. A quarantine row should show *which* field was null.
+
+## Phase 4: gold
+
+### Star schema and SCD Type 2
+- A **fact table** holds events and measures plus keys; **dimensions** hold the descriptive context
+  (who, when, what type). BI tools join them for labels.
+- **SCD Type 2** keeps history: a customer who changed segment is several rows, each valid over a
+  range. The fact stores the key of the version valid **at the event time** (a point-in-time join).
+  Ranges are half-open, `[from, to)`, so the boundary neither gaps nor double counts.
+- The **Unknown member** (key -1) keeps facts whose IDs are not in the dimension. An inner join
+  would drop them, and a null key would be ambiguous.
+- **Surrogate keys as hashes** stay the same when a table is rebuilt, and work in a materialized
+  view, which cannot use identity columns.
+
+### Late-arriving changes
+- A change event dated earlier than transactions already loaded re-cuts the customer's history in the
+  middle, and the fact (a materialized view) re-points only the affected rows. I computed the
+  expected number from the before-state (173 sender keys, 98 recipient keys) and it was exact, with the
+  other 6,955,610 rows unchanged.
+
+### A reconciliation that fails the run
+- Control totals compare gold with bronze, and every check is a `FAIL UPDATE` expectation. A mismatch
+  fails the update and names the check, and the error even prints all the totals.
+- I did not trust it until it had failed: I made one constraint demand `bronze + 1`, watched the update
+  fail with `paysim_rows_match` named, reverted, and rerun to green.
+- The trade-off: other gold tables refreshed earlier in the same update stay visible. A
+  write-audit-publish pattern would hide them, at the cost of a staging copy.
+- An independent check recomputes each customer's segment at event time from the raw change events,
+  without Auto CDC, so it cannot share a bug with the thing it checks.
+
+### Rules are measured, not trusted
+- Each simple rule has a precision (right when it flags) and a recall (share of fraud it finds).
+  PaySim's own rule has 100% precision but 0.19% recall; balance drain has 97.6% recall, but that is a
+  simulation artifact, and the realistic night-time rule is wrong more than half the time (44%).
+
+### Layout: measure, do not guess
+- I built three scratch copies of the fact (plain, partitioned by date, liquid-clustered) and read the
+  files and bytes each query read from `system.query.history`. Partitioning won only a single-date query
+  (1 file, 0.4 MB) and was worst for the others: a type-only query opened 47 files (25 MB) against 4 files
+  (3.3 MB) when clustered. Many small files cost more than they save.
+- At this size the wall-clock time was the same for every layout, so the effect is bytes read, not speed,
+  and my plain baseline was not random. State the caveats along with the result.
+
+### Small lessons
+- Expectation metrics for materialized views are in the event log, readable with `event_log()` in
+  SQL, but a REST events call missed them. `DESCRIBE DETAIL` does not work on a materialized view.
+- Every gold view is recomputed in full on each update at this size.
+- My layout-experiment script crashed when the query history returned no rows yet, and its cleanup was the
+  last line, so the scratch schema was left behind. Cleanup belongs in a `finally` block.
+- A new kind of file (a late file with no manifest) exposed a gap in my own reconciliation. I fixed it by
+  checking the late file against the landing folder, not by loosening the check.

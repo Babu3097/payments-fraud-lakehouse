@@ -39,7 +39,20 @@ profile AS (
         to_date(left(substring_index(_source_file, 'customer_profile_', -1), 10)) AS feed_date,
         count(*) AS bronze_rows
     FROM workspace.bronze.customer_profile_changes
+    WHERE NOT endswith(_source_file, '_late.csv')
     GROUP BY 1
+),
+
+late_landing AS (
+    -- Late-arriving files have no manifest, so their rows are counted in the landing folder itself.
+    SELECT count(*) AS late_rows
+    FROM (
+        SELECT _metadata.file_path
+        FROM read_files(
+            '/Volumes/workspace/bronze/landing/customer_profile/', format => 'csv', header => true
+        )
+    ) AS landing
+    WHERE endswith(landing.file_path, '_late.csv')
 ),
 
 checks AS (
@@ -134,9 +147,16 @@ checks AS (
     FROM workspace.bronze.transactions_daily
     UNION ALL
     SELECT
-        'customer profile: total rows equal the manifests' AS check_name,
-        (SELECT sum(m.profile_rows) FROM manifests AS m) AS expected,
+        'customer profile: total rows equal the manifests plus the late files' AS check_name,
+        (SELECT sum(m.profile_rows) FROM manifests AS m)
+        + (SELECT l.late_rows FROM late_landing AS l) AS expected,
         count(*) AS actual
+    FROM workspace.bronze.customer_profile_changes
+    UNION ALL
+    SELECT
+        'customer profile: late-arriving rows equal the landing files' AS check_name,
+        (SELECT l.late_rows FROM late_landing AS l) AS expected,
+        count_if(endswith(_source_file, '_late.csv')) AS actual
     FROM workspace.bronze.customer_profile_changes
     UNION ALL
     SELECT

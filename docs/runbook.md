@@ -15,7 +15,9 @@ Each entry follows the same shape: **Symptom, likely causes, how to check, fix, 
 
 | Scenario | Written in |
 |---|---|
-| Reconciliation check failed (gold totals differ from raw) | Phase 4 |
+| The update failed on a gold reconciliation check | Below (Phase 4) |
+| A customer change arrived late | Below (Phase 4) |
+| Gold takes longer than expected | Below (Phase 4) |
 | The update failed on a hard expectation | Below (Phase 3) |
 | The quarantine table grew unexpectedly | Below (Phase 3) |
 | Fraud events are missing from the KPIs | Below (Phase 3) |
@@ -105,6 +107,52 @@ Each entry follows the same shape: **Symptom, likely causes, how to check, fix, 
 - **Check:** `SELECT count(*) FROM workspace.silver.transactions_quarantine WHERE get_json_object(raw_record, '$.is_fraud') = 'true'`.
 - **Fix:** repair the rows at the source and resend them as a new file (see docs/silver.md).
 - **Prevent:** alert when quarantined fraud rows are above zero, since each one hides a fraud event.
+
+## The update failed on a gold reconciliation check
+
+- **Symptom:** the update is FAILED and the message reads "Update ... is FAILED since flow
+  workspace.gold.reconciliation failed an expectation check", followed by "Violated expectations:
+  '<check name>'".
+- **Seen for real (a deliberate test on 2026-10-04):** the message also prints the **whole control-total
+  record** (gold and bronze rows, amounts, the accounting identity, orphan counts), so the failed
+  check and the numbers behind it are in the failure itself. Read the numbers first.
+- **What it means:** gold no longer agrees with the data it was built from. Do not publish gold.
+  Note that the other gold tables had already refreshed in the same update and stay visible
+  (ADR-017), so tell consumers if the data is in doubt.
+- **Check:** compare the two sides of the named check. For example, `paysim_rows_match` compares
+  `paysim_rows_gold` with `paysim_rows_bronze`; `generated_events_accounted_for` expects
+  `bronze_generated_events = gold_generated_rows + quarantined_events`. Then run
+  `sql/checks/gold_reconciliation.sql` for the independent view from the landing files.
+- **Likely causes:** a silver rule changed and rows moved between gold and quarantine, a dimension key
+  stopped resolving (orphan counts above zero), or a source file was added or replaced outside the
+  normal flow.
+- **Fix:** correct the cause, rerun, and confirm the update COMPLETES. Never loosen a constraint to
+  make a run pass.
+- **Test it:** the failure path was proven by making one constraint demand `bronze + 1`, watching the
+  update fail with the check named, reverting, and rerunning to green.
+
+## A customer change arrived late
+
+- **Symptom:** a profile change event is dated earlier than transactions that were already loaded.
+- **Expected behaviour (tested):** Auto CDC re-cuts the customer's history in the middle, and the
+  fact table, a materialized view, re-points only the affected transactions. In the test, four late
+  events moved exactly 173 sender keys and 98 recipient keys, and every other row was unchanged.
+- **Check:** the SCD2 checks in `sql/checks/gold_reconciliation.sql`: no gaps or overlaps, one current
+  version per customer, and the point-in-time test that recomputes each customer's attributes at
+  event time from the events themselves.
+- **Fix:** none needed. If the point-in-time check fails, a version range is wrong.
+- **Note:** a late file has no manifest. The bronze reconciliation accounts for files named
+  `*_late.csv` by counting them in the landing folder.
+
+## Gold takes longer than expected
+
+- **What is normal today:** every gold materialized view is **recomputed in full** on each update (the
+  refresh type is `RECOMPUTED`), because the joins, windows and non-row-tracked sources prevent an
+  incremental refresh. At 7 million rows a whole update takes about 2 to 5 minutes including cold start.
+- **Check:** the update's timeline in the pipeline UI, and `DESCRIBE EXTENDED workspace.gold.<name>`
+  for the last refresh type.
+- **If it grows:** enable row tracking on the sources and check which operations block incremental
+  refresh, or split the heaviest view (the fact) so only it is recomputed.
 
 ## Safe rerun
 

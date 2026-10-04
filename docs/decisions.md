@@ -233,16 +233,32 @@ bottom. Status is one of: Accepted, Open, Superseded.
 
 ## ADR-018: Gold layout: liquid clustering, not partitioning
 
-- **Status:** Proposed (to be backed by a measurement before the phase closes)
+- **Status:** Accepted (measured on 2026-10-04)
 - **Decision:** `fact_transactions` uses `CLUSTER BY (date_key, type_key)`. No gold table is
   partitioned.
-- **Why:** The fact is about 280 MB in a single file. A daily partition would produce about 50
-  files of a few megabytes each (the small-files problem), and Databricks recommends liquid
-  clustering for new tables below roughly a terabyte. The keys are the two columns dashboards
-  filter by, a date range and a type, and liquid clustering can change keys later without a rewrite.
-- **Trade-offs:** At this size a file layout cannot prune much, because there is almost only one
-  file, so the benefit is design hygiene and room to grow, not speed today. The experiment records
-  what the layout does at a smaller file size.
+- **Why:** The two keys are what dashboards filter by, a date range and a type. Databricks recommends
+  liquid clustering for new tables below roughly a terabyte, and it can change keys later without a
+  rewrite. Daily partitions would create tiny files (about 47 partitions, most of them a few MB).
+- **Measurement:** three scratch copies of the fact (7.0M rows, 8 MB target file size, compacted with
+  OPTIMIZE) were queried, and files and bytes read come from `system.query.history`. The scratch
+  schema was dropped afterwards.
+
+  | Query | Plain (5 files) | Partitioned (57 files) | Clustered (25 files) |
+  |---|---|---|---|
+  | One day | 2 files, 9.6 MB | 1 file, 0.4 MB | 4 files, 5.3 MB |
+  | One week and TRANSFER | 1 file, 5.9 MB | 7 files, 2.7 MB | 1 file, 0.9 MB |
+  | TRANSFER only | 2 files, 10.3 MB | 47 files, 25.4 MB | 4 files, 3.3 MB |
+  | Full scan | 5 files, 23.9 MB | 57 files, 36.2 MB | 25 files, 28.8 MB |
+
+- **Reading it:** partitioning wins only the single-date query and is the worst layout for every
+  other one: a type-only query opens 47 files, and a full scan reads about 50% more bytes than the
+  plain table. Clustering is best for the realistic mix of date range plus type, and never bad.
+- **Trade-offs and caveats:** wall-clock time was 0.6 to 1.4 s for every layout (noise), so at this
+  size the effect is bytes read, not speed. The plain copy was not random (its row order happened to
+  correlate with date), which understates clustering's benefit. Each query ran once, so the numbers
+  are indicative. The production fact is 4 files, so it behaves like the plain copy today; the
+  clustering is set for when it grows. Partitioning would still be right for a regulatory need to
+  separate data physically or drop whole days.
 
 ## ADR-019: SCD Type 2 built by Auto CDC and joined at event time
 
