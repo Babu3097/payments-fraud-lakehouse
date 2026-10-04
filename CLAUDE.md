@@ -82,7 +82,8 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   Done: schemas `workspace.bronze/silver/gold`; managed volume `workspace.bronze.landing`
   (`sql/01_create_landing_volume.sql`); gov.uk is reachable from serverless; PaySim downloaded,
   verified and profiled (`docs/data_profile.md`, data kept in gitignored `data/raw/paysim/`);
-  upload to `/Volumes/workspace/bronze/landing/paysim/` started.
+  uploaded to `/Volumes/workspace/bronze/landing/paysim/` and verified (493,534,783 bytes; Databricks
+  reads 6,362,620 rows, 8,213 fraud, 16 flagged, step 1 to 743, all equal to the local profile).
   Time anchor: step 1 = 2026-08-20 00:00 (ADR-008), so the generator starts at 2026-09-20.
   Next: generator (injected defects, persistent customer population, SCD2 change feed; decide the
   population size first), bank-holidays pull job, minimal bundle, Auto Loader bronze pipeline,
