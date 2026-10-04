@@ -117,4 +117,14 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   spans 20 Sep to 4 Oct (15 days, files in the gitignored `data/generated/`).
   Next: push the branch and open the PR (ask first), Phase 3 interview questions, wait for the
   user's OK before Phase 4 (gold).
+- **Phase 3 is merged (PR 2).** Phase 4 follows.
+- **Phase 4 (in progress, branch `phase-4-gold`):** decisions in ADR-017 to ADR-020. Written and
+  lint-clean, NOT yet deployed: `pipelines/gold/` with `dim_date`, `dim_type`, `dim_customer`
+  (Auto CDC SCD2 into a private `customer_history` plus a keyed view with an Unknown member),
+  `fact_transactions` (point-in-time join, rule flags, `CLUSTER BY (date_key, type_key)`), four KPI
+  views, `unusual_activity`, `rule_effectiveness`, and `reconciliation` (FAIL UPDATE constraints);
+  plus `sql/checks/gold_reconciliation.sql`. Predictions: dim_customer 69,551 rows (65,001
+  current), dim_date 365 rows with 8 England and Wales holidays, fact 6,956,020 rows (6,362,620
+  with an Unknown customer, all PaySim), kpi_daily 46 rows. Next: deploy, dry-run, run, verify, a
+  clustering experiment in a scratch schema (ask first), docs (`kpis.md`, star schema diagram), PR.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.
