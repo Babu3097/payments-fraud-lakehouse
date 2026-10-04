@@ -13,9 +13,11 @@ resources:
         # Event dates are derived from timestamps, so the time zone must never depend on a default.
         spark.sql.session.timeZone: UTC
       # The API only accepts a plain `**` here (no `**/*.py`). One line per layer folder, so the
-      # README in pipelines/ is never treated as pipeline code. The gold line comes later.
+      # README in pipelines/ is never treated as pipeline code.
       libraries:
         - glob:
             include: ../pipelines/bronze/**
         - glob:
             include: ../pipelines/silver/**
+        - glob:
+            include: ../pipelines/gold/**

@@ -212,6 +212,83 @@ bottom. Status is one of: Accepted, Open, Superseded.
   retention policy for the landing files. On a rebuild every file is read at once, so a column added
   later (`channel`) is known from the start and no schema-change restart happens.
 
+## ADR-017: Gold is a star schema, and a reconciliation view fails the run on any mismatch
+
+- **Status:** Accepted (results to verify on the first gold run)
+- **Decision:** `fact_transactions` (grain: one transaction) with three dimensions: `dim_customer`
+  (SCD2), `dim_date` and `dim_type`. Surrogate keys are deterministic hashes. An ID with no
+  dimension row, which is every PaySim ID, maps to an Unknown member (key -1), and the raw ID stays
+  on the fact. A one-row `gold.reconciliation` view compares gold with bronze (rows, amounts to the
+  cent, an accounting identity that every raw event is in gold or quarantine, key integrity, KPI
+  totals), and each check is a `FAIL UPDATE` expectation. Independent checks in
+  `sql/checks/gold_reconciliation.sql` use the landing files instead of bronze.
+- **Why:** A star schema keeps queries simple and suits Power BI. Hash keys are stable across
+  rebuilds and work in a materialized view, which cannot use identity columns. A failing
+  expectation names the check that broke, stops the update, and needs no one to remember to look.
+- **Trade-offs:** The Unknown member means PaySim facts cannot be sliced by customer segment or
+  region. The reconciliation compares gold with bronze, which was itself reconciled to the landing
+  files, so the heavier landing-file check runs separately. A failed update does not hide gold tables
+  that already refreshed in the same update; a write-audit-publish pattern (build, check, then
+  publish) would, at the cost of a staging copy.
+
+## ADR-018: Gold layout: liquid clustering, not partitioning
+
+- **Status:** Accepted (measured on 2026-10-04)
+- **Decision:** `fact_transactions` uses `CLUSTER BY (date_key, type_key)`. No gold table is
+  partitioned.
+- **Why:** The two keys are what dashboards filter by, a date range and a type. Databricks recommends
+  liquid clustering for new tables below roughly a terabyte, and it can change keys later without a
+  rewrite. Daily partitions would create tiny files (about 47 partitions, most of them a few MB).
+- **Measurement:** three scratch copies of the fact (7.0M rows, 8 MB target file size, compacted with
+  OPTIMIZE) were queried, and files and bytes read come from `system.query.history`. The scratch
+  schema was dropped afterwards.
+
+  | Query | Plain (5 files) | Partitioned (57 files) | Clustered (25 files) |
+  |---|---|---|---|
+  | One day | 2 files, 9.6 MB | 1 file, 0.4 MB | 4 files, 5.3 MB |
+  | One week and TRANSFER | 1 file, 5.9 MB | 7 files, 2.7 MB | 1 file, 0.9 MB |
+  | TRANSFER only | 2 files, 10.3 MB | 47 files, 25.4 MB | 4 files, 3.3 MB |
+  | Full scan | 5 files, 23.9 MB | 57 files, 36.2 MB | 25 files, 28.8 MB |
+
+- **Reading it:** partitioning wins only the single-date query and is the worst layout for every
+  other one: a type-only query opens 47 files, and a full scan reads about 50% more bytes than the
+  plain table. Clustering is best for the realistic mix of date range plus type, and never bad.
+- **Trade-offs and caveats:** wall-clock time was 0.6 to 1.4 s for every layout (noise), so at this
+  size the effect is bytes read, not speed. The plain copy was not random (its row order happened to
+  correlate with date), which understates clustering's benefit. Each query ran once, so the numbers
+  are indicative. The production fact is 4 files, so it behaves like the plain copy today; the
+  clustering is set for when it grows. Partitioning would still be right for a regulatory need to
+  separate data physically or drop whole days.
+
+## ADR-019: SCD Type 2 built by Auto CDC and joined at event time
+
+- **Status:** Accepted (results to verify on the first gold run)
+- **Decision:** Auto CDC builds the history from the profile change events with `TRACK HISTORY ON
+  segment, region`. A version is valid over the half-open range `[valid_from, valid_to)`, and the
+  open end of the current version is 9999-12-31 so a join needs one range test. The fact joins the
+  version that was valid at `event_ts`, for both the sender and the recipient.
+- **Why:** Reporting by segment or region must reflect where a customer was when the event happened.
+  Half-open ranges avoid both a gap and a double count at the boundary. The post-run check recomputes
+  every generated event's segment and region straight from the change events, without Auto CDC, and
+  must match the dimension.
+- **Trade-offs:** Because the fact stores the key of a version, a late-arriving change event needs
+  the fact to be recomputed, which a materialized view does. Both attributes are tracked, so a change
+  to either creates a version.
+
+## ADR-020: Simple rules are measured against the label, not trusted
+
+- **Status:** Accepted
+- **Decision:** The fact carries rule flags (balance drain, night-time high-value transfer, burst,
+  and the source's own rule). `gold.rule_effectiveness` reports each rule's precision and recall
+  against the fraud label, per source. `gold.unusual_activity` lists entity-days flagged by
+  documented thresholds.
+- **Why:** A rule is only useful if you know how often it is right and how much fraud it finds. On
+  PaySim the source's own rule flags 16 of 8,213 fraud rows, while balance drain flags almost all
+  of them, which is a simulation artifact, so the numbers are reported with that caveat.
+- **Trade-offs:** The thresholds are our own choices, written at the top of each file, and the
+  generated fraud was built from the same three patterns the rules look for, so recall on it is
+  flattering. Real data would need rules tuned against real labels.
+
 ## ADR-010: A deterministic generator with a manifest as ground truth
 
 - **Status:** Accepted

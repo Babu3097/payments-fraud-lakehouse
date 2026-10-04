@@ -1,8 +1,10 @@
 # Architecture
 
-> **Status:** the landing zone, bronze and silver are built and verified (Phase 2: four sources,
-> incremental and schema-change runs; Phase 3: unified, deduplicated and quarantined transactions,
-> 43 reconciliation checks, see [silver.md](silver.md)). Gold and the BI layer are still planned.
+> **Status:** the landing zone, bronze, silver and gold are built and verified (Phase 2: four
+> sources, incremental and schema-change runs; Phase 3: unified, deduplicated and quarantined
+> transactions, see [silver.md](silver.md); Phase 4: a star schema with an SCD2 customer dimension,
+> KPI tables and a reconciliation that fails the run, see [data_model.md](data_model.md) and
+> [kpis.md](kpis.md)). 66 checks pass. The scheduled job, alerts and the BI layer are still planned.
 > Updated at the end of each phase.
 
 ## Data flow
@@ -20,8 +22,9 @@ flowchart LR
         BR["bronze<br/>raw, append-only"]
         SI["silver<br/>typed, deduplicated,<br/>expectations"]
         QU["quarantine table<br/>rejected rows"]
-        GO["gold<br/>star schema + KPIs"]
-        REC{{"Reconciliation check<br/>fails the run on mismatch"}}
+        GO["gold star schema<br/>fact + dim_customer (SCD2),<br/>dim_date, dim_type"]
+        KP["gold KPI tables,<br/>rule metrics,<br/>unusual activity"]
+        REC{{"gold.reconciliation<br/>FAIL UPDATE on any mismatch"}}
     end
 
     A --> V
@@ -31,8 +34,11 @@ flowchart LR
     BR --> SI
     SI -->|bad rows| QU
     SI --> GO
+    GO --> KP
     GO --> REC
+    BR -.->|"control totals"| REC
     GO --> WH["SQL warehouse"]
+    KP --> WH
     WH --> PBI["Power BI report"]
     WH --> DASH["AI/BI dashboard"]
 ```

@@ -117,4 +117,19 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   spans 20 Sep to 4 Oct (15 days, files in the gitignored `data/generated/`).
   Next: push the branch and open the PR (ask first), Phase 3 interview questions, wait for the
   user's OK before Phase 4 (gold).
+- **Phase 3 is merged (PR 2).** Phase 4 follows.
+- **Phase 4 (built and verified on branch `phase-4-gold`, PR pending):** decisions in ADR-017 to
+  ADR-020. `pipelines/gold/` is deployed: `dim_date` (3 regions), `dim_type`, `dim_customer` (Auto
+  CDC SCD2 into a private `customer_history`, hash keys, Unknown member), `fact_transactions`
+  (point-in-time join, rule flags, `CLUSTER BY (date_key, type_key)`), four KPI views,
+  `unusual_activity`, `rule_effectiveness` and `reconciliation` (12 constraints, 11 hard FAIL
+  UPDATE). First gold run 2 min 17 s, all 9 predictions exact. Proofs done: a rerun with nothing new
+  left all 11 gold objects identical; a deliberately broken constraint made the update FAIL with
+  `paysim_rows_match` named (other gold tables had already refreshed), then reverted and rerun green;
+  a new day (5 Oct) plus 4 late-arriving profile events moved exactly 173 sender and 98 recipient
+  keys and left 6,955,610 other rows identical. 66 checks pass (19 bronze, 25 silver, 22 gold), 29
+  gold expectations 0 failed (read with `event_log()` SQL). Generated data now spans 20 Sep to 5 Oct
+  (16 days) plus `customer_profile_2026-09-25_late.csv` (4 late events; bronze checks account for
+  `*_late.csv`). The layout experiment is in ADR-018. Next: PR (ask first), interview questions,
+  Phase 5 only after the user's OK.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.
