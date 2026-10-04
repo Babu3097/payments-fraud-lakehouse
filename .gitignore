@@ -1,5 +1,6 @@
-# Python environments and caches
+# Python environments, caches and build output
 .venv/
+dist/
 __pycache__/
 *.pyc
 .pytest_cache/

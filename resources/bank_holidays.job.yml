@@ -1,0 +1,22 @@
+# Pulls the GOV.UK bank holidays calendar inside Databricks and lands it, untouched, in the
+# landing volume (ADR-009). Serverless: no cluster is declared, only the environment below.
+# Phase 5 adds the schedule and failure alerts.
+resources:
+  jobs:
+    pull_bank_holidays:
+      name: pull_bank_holidays
+      tasks:
+        - task_key: pull
+          environment_key: default
+          python_wheel_task:
+            package_name: payments_lakehouse
+            entry_point: pull-holidays
+            parameters:
+              - --dest
+              - /Volumes/${var.catalog}/bronze/landing/bank_holidays
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - ../dist/*.whl

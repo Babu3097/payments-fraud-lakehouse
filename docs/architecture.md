@@ -1,7 +1,8 @@
 # Architecture
 
-> **Status: planned design.** Updated at the end of each phase. Nothing below is built until
-> the README roadmap says so.
+> **Status:** the landing zone and bronze are built and verified (Phase 2: four sources, 18
+> reconciliation checks, incremental and schema-change runs proven). Silver, gold and the BI layer
+> are still planned. Updated at the end of each phase.
 
 ## Data flow
 

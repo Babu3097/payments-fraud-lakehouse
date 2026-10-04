@@ -78,6 +78,30 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   private key and a 1 MB file), CI workflow, docs and 4 ADRs. 22 files pushed to the public repo
   and the first CI run was green in 19 s. Checked against Databricks docs: serverless
   environments 3-6 run Python 3.12.3.
-- **Next (Phase 2, bronze):** first decide how the generator fills two PaySim gaps: no customer
-  attributes (SCD2 would be artificial) and no approved/declined status (see
-  `docs/data_model.md`, open questions). The user downloads PaySim from Kaggle themselves.
+- **Phase 2 (in progress, branch `phase-2-bronze`):** decisions are in ADR-005 to ADR-009.
+  Done: schemas `workspace.bronze/silver/gold`; managed volume `workspace.bronze.landing`
+  (`sql/01_create_landing_volume.sql`); gov.uk is reachable from serverless; PaySim downloaded,
+  verified and profiled (`docs/data_profile.md`, data kept in gitignored `data/raw/paysim/`);
+  uploaded to `/Volumes/workspace/bronze/landing/paysim/` and verified (493,534,783 bytes; Databricks
+  reads 6,362,620 rows, 8,213 fraud, 16 flagged, step 1 to 743, all equal to the local profile).
+  Time anchor: step 1 = 2026-08-20 00:00 (ADR-008), so the generator starts at 2026-09-20.
+  Generator done (`src/payments_lakehouse/generator.py`, `docs/generator.md`, ADR-010): 11 tests
+  pass, 14 days generated locally in `data/generated/` (not uploaded yet): 560,000 unique events,
+  69,225 profile rows. Decided: SCD2 for generator customers only (about 60k + 5k merchants), 40k
+  rows a day with documented defects, `channel` field from 2026-09-28.
+  Upload plan: batch 1 (20 to 23 Sep), batch 2 (24, 26, 27 Sep, skipping 25), batch 3 (the late
+  25 Sep file plus 28 Sep onwards), so the pipeline meets late data and the schema change.
+  First cycle done (2026-10-04): bundle deployed to the dev target (pipeline
+  `payments_lakehouse_pipeline`, job `pull_bank_holidays`); the holidays job landed its file in 34 s;
+  batch 1 uploaded; the first pipeline update COMPLETED in 97 s (PaySim 6.36M rows in about 21 s);
+  `sql/checks/bronze_reconciliation.sql` passes 18 of 18 and the expectation metrics show 0 failed.
+  Gotcha: the pipeline `libraries.glob` must be a plain `**` (the API rejects `**/*.py`), and
+  `bundle validate` cannot catch server-side rules like that.
+  Incremental proof done (2026-10-04): run A (nothing new) added 0 rows in 25 s; run B added
+  121,200 transaction and 975 profile rows; run C met the late 25 Sep file and the new `channel`
+  column: the update was cancelled and the platform restarted it itself (cause SCHEMA_CHANGE,
+  19 s), giving 14 days x 40,400 rows exactly once, 18 of 18 checks passing (ADR-012, runbook).
+  Written locally but not yet deployed: `pathGlobFilter` on the four loaders.
+  Next: deploy that hardening and rerun (expect 0 new rows), push the branch and open the PR
+  (ask first), Phase 2 interview questions, then wait for the user's OK before Phase 3.
+- **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.

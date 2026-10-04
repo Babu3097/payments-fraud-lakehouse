@@ -40,6 +40,9 @@ uv run pre-commit install        # lint hooks run on every commit
 uv run pytest                    # run unit tests
 ```
 
+The bundle (`databricks.yml`) uses the CLI profile named `DEFAULT`, so keep that profile name when
+you log in (step 2). Check the bundle without deploying anything: `databricks bundle validate`.
+
 Optional: install the Databricks AI Tools skills for Claude Code, scoped to this project:
 `databricks aitools install --agents claude-code --scope project`
 

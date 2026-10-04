@@ -1,0 +1,29 @@
+# Asset Bundle root: the whole project described as code and deployed with `databricks bundle deploy`.
+# Phase 2 starts it small (one pipeline, one job, dev target). Phase 5 adds the schedule, failure
+# alerts and a prod target. See docs/decisions.md, ADR-007.
+bundle:
+  name: payments_lakehouse
+
+include:
+  - resources/*.yml
+
+# Build our own package as a wheel, so a Databricks job can run its code (src/payments_lakehouse).
+artifacts:
+  payments_lakehouse_wheel:
+    type: whl
+    build: uv build --wheel
+    path: .
+
+variables:
+  catalog:
+    description: Unity Catalog catalog that holds the bronze, silver and gold schemas
+    default: workspace
+
+targets:
+  dev:
+    # development mode prefixes resource names with the user and pauses any schedule
+    mode: development
+    default: true
+    workspace:
+      # The profile name lives in ~/.databrickscfg. The workspace URL is never committed.
+      profile: DEFAULT

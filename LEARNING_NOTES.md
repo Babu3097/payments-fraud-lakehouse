@@ -9,9 +9,10 @@ makes it stick for interviews.
 ### Two ways to log in to Databricks
 - A **personal access token** is a long-lived secret string. Handy for scripts, but if it leaks,
   whoever holds it is me until it is revoked.
-- **OAuth** (what `databricks auth login` does) opens the browser, uses my normal login and MFA,
-  and gets a short-lived token that refreshes automatically. I never copy a secret, and it is
-  stored in the macOS keychain.
+- **OAuth** (what `databricks auth login` does) opens the browser, uses my normal login, and gets
+  a short-lived token that refreshes automatically. I never copy a secret, and it is stored in the
+  macOS keychain. Free Edition has no SSO (sign-in is email OTP, Google or Microsoft), so any
+  2-step verification comes from that account.
 - A pipeline in CI cannot click "Authorize", so it needs a **service principal**: a machine
   identity with only the permissions it needs, and its secret kept in GitHub Secrets.
 
@@ -64,3 +65,68 @@ makes it stick for interviews.
 ### Testing the guards
 - A check that has never failed is not proven. I planted an unused import, messy SQL, a fake
   private-key header and a 1 MB file, watched each hook reject them, then deleted them.
+
+## Phase 2: bronze and the data
+
+### Profile the data before designing anything
+- Scanning the real PaySim file changed three decisions: it is perfectly clean (so I must inject my
+  own defects), its volume is very uneven (so the time anchor moved to 20 Aug), and its built-in
+  fraud flag catches only 16 of 8,213 fraud rows (so the derived approval rate is nearly 100%).
+- Two independent tools (a Python scan and Databricks SQL) gave the same counts. That is a
+  reconciliation.
+
+### What a landing zone and bronze are for
+- The landing volume holds files exactly as received. Bronze is raw, append-only Delta that can be
+  replayed. If silver has a bug, fix it and rebuild from bronze without refetching the sources.
+- Free Edition runs only serverless compute, allows one active pipeline per type, and restricts
+  outbound internet to trusted domains. I tested that gov.uk is reachable before designing around it.
+
+### A deterministic generator makes everything else testable
+- Seeding each day from (seed, date) means regenerating a day gives identical files. That makes a
+  rerun idempotent and lets tests assert exact counts.
+- Files are written to a temp name and then renamed, so a half-written file is never picked up.
+- Injecting defects onto disjoint rows, plus a manifest of what was injected, makes data quality
+  provable: silver's quarantine count has to equal the manifest.
+- A deliberate schema change (a new `channel` field from 28 Sep) is how I test schema evolution.
+
+### Asset Bundles
+- A bundle is YAML saying which resources should exist (a pipeline, a job) plus the code they run.
+  `databricks bundle deploy` makes the workspace match the files and remembers what it created.
+  The `dev` target prefixes names with `[dev me]`, so experiments cannot collide with production.
+- `bundle validate` only checks the structure. My first deploy created the job but the server
+  rejected the pipeline (a `**/*.py` glob is not allowed, plain `**` is). Deploying again was safe
+  because a deploy is idempotent.
+
+### Auto Loader and streaming tables
+- Auto Loader keeps a checkpoint of which files it has already read, so each update reads only
+  new files. A streaming table is append-only: it adds rows and never rewrites old ones.
+- The first update ingested everything that was already there (6.36M PaySim rows in about 21 s).
+- An explicit schema is the data contract. A value that does not fit lands in `_rescued_data`,
+  and a warn-only expectation counts those rescues without dropping rows.
+- The pipeline event log records each update's states and the expectation metrics (passed and
+  failed counts), which is where a runbook starts.
+
+### Incremental, idempotent and exactly once
+- Run A had no new files and added 0 rows in 25 s; PaySim's 493 MB flow finished in under a second
+  because the checkpoint already knew that file. Run B read only the three new files.
+- A late file (25 Sep, delivered after 26 and 27 Sep) is ingested normally, because Auto Loader goes
+  by arrival and not by file name or date.
+- Even though an update was interrupted, every day has exactly 40,400 rows: no duplicates.
+
+### Schema evolution
+- When the new `channel` column appeared, Auto Loader stopped the update and the platform started a
+  new one itself (cause `SCHEMA_CHANGE`). Old rows keep an empty `channel`. A value that conflicts
+  with a declared type goes to `_rescued_data` instead.
+- A job that runs the pipeline could report "cancelled" for that first update even though the data
+  completed, so a job needs a retry (Phase 5).
+- I predicted the update would stop and need a manual rerun. Half right: it stopped, but it restarted
+  itself. Writing a prediction down first made the difference obvious.
+
+### Reconciliation
+- 18 SQL checks compare every bronze table with the files that fed it and with the generator's
+  manifests. Counts are not enough, so I also checked values: the numbers written in scientific
+  notation parsed to exactly the right amounts.
+
+### Testing the tests
+- Passing tests can still be weak. I broke the generator on purpose five ways in a scratch copy and
+  confirmed each break was caught by exactly the test meant to catch it.
