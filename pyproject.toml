@@ -7,9 +7,11 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = []
 
-# Console command the Databricks job calls (python_wheel_task entry_point).
+# Console commands the Databricks job calls (python_wheel_task entry points).
 [project.scripts]
 pull-holidays = "payments_lakehouse.holidays:main"
+generate-day = "payments_lakehouse.generator:landing_main"
+run-checks = "payments_lakehouse.checks:main"
 
 [build-system]
 requires = ["hatchling"]
