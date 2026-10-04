@@ -31,7 +31,35 @@ CREATE OR REFRESH PRIVATE STREAMING TABLE transactions_unified (
 -- Source 1: the daily feed from the generator. The event time arrives as text and the feed
 -- contains bad values on purpose, so parsing is where those rows are caught.
 CREATE FLOW unify_generated AS INSERT INTO transactions_unified BY NAME
-WITH h AS (
+WITH t AS (
+    SELECT
+        event_id,
+        event_ts,
+        type,
+        amount,
+        customer_id,
+        counterparty_id,
+        origin_balance_before,
+        origin_balance_after,
+        status,
+        decline_reason,
+        is_fraud,
+        channel,
+        source_system,
+        _source_file,
+        _ingested_at,
+        -- Only the documented format counts as a timestamp: YYYY-MM-DDTHH:MM:SSZ. Spark's own
+        -- parser also reads a bare year, a date alone, or a time alone (which it dates with the
+        -- day the pipeline runs, so a replay would change the answer). Anything else is left
+        -- unparsed here and quarantined below as BAD_TIMESTAMP.
+        CASE
+            WHEN event_ts RLIKE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+                THEN try_to_timestamp(event_ts)
+        END AS parsed_ts
+    FROM STREAM (workspace.bronze.transactions_daily)
+),
+
+h AS (
     SELECT DISTINCT holiday_date
     FROM workspace.silver.bank_holidays
     WHERE division = 'england-and-wales'
@@ -55,8 +83,8 @@ SELECT
     t.event_ts AS event_ts_raw,
     t._source_file,
     t._ingested_at,
-    try_to_timestamp(t.event_ts) AS event_ts,
-    to_date(try_to_timestamp(t.event_ts)) AS event_date,
+    t.parsed_ts AS event_ts,
+    to_date(t.parsed_ts) AS event_date,
     CASE left(t.counterparty_id, 1) WHEN 'M' THEN 'merchant' WHEN 'C' THEN 'customer' END
         AS counterparty_kind,
     t.is_fraud = 1 AS is_fraud,
@@ -64,12 +92,16 @@ SELECT
     h.holiday_date IS NOT NULL AS is_bank_holiday,
     filter(
         array(
+            -- The key and the fields every later layer depends on. A missing one is a defect of
+            -- the row, so the row is set aside instead of stopping the update.
             CASE
                 WHEN
-                    t.customer_id IS NULL
+                    t.event_id IS NULL
+                    OR t.customer_id IS NULL
                     OR t.amount IS NULL
                     OR t.type IS NULL
                     OR t.event_ts IS NULL
+                    OR t.status IS NULL
                     THEN 'NULL_REQUIRED_FIELD'
             END,
             CASE WHEN t.amount < 0 THEN 'NEGATIVE_AMOUNT' END,
@@ -80,17 +112,19 @@ SELECT
                     THEN 'UNKNOWN_TYPE'
             END,
             CASE
-                WHEN
-                    t.event_ts IS NOT NULL AND try_to_timestamp(t.event_ts) IS NULL
-                    THEN 'BAD_TIMESTAMP'
+                WHEN t.event_ts IS NOT NULL AND t.parsed_ts IS NULL THEN 'BAD_TIMESTAMP'
+            END,
+            CASE
+                WHEN t.status IS NOT NULL AND t.status NOT IN ('APPROVED', 'DECLINED')
+                    THEN 'UNKNOWN_STATUS'
             END
         ),
         x -> x IS NOT NULL
     ) AS failed_checks
-FROM STREAM (workspace.bronze.transactions_daily) AS t
+FROM t
 -- One row per date, so a date with two holiday names can never duplicate a transaction.
 LEFT JOIN h
-    ON h.holiday_date = to_date(try_to_timestamp(t.event_ts));
+    ON h.holiday_date = to_date(t.parsed_ts);
 
 -- Source 2: the PaySim history. PaySim has no id, no timestamp and no status, so they are derived:
 -- the id is a hash of every column (the file has no duplicate rows, see docs/data_profile.md),

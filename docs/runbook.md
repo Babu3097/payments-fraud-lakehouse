@@ -33,7 +33,7 @@ Each entry follows the same shape: **Symptom, likely causes, how to check, fix, 
 | Pause or resume the schedule | Below (Phase 5) |
 | No alert email arrived | Below (Phase 5) |
 | The calendar runs out | Below (Phase 5) |
-| CI is red on `main` | Phase 6 |
+| CI is red on `main` | Below (Phase 6) |
 
 ## Files were uploaded but no new rows appeared
 
@@ -263,3 +263,25 @@ row counts and content hashes (the 19th, `dim_date`, grew from 365 to 1,096 rows
 - **Fix, before it happens:** extend the end of the `SEQUENCE` in `pipelines/gold/dim_date.sql`, the
   upper bound of `event_date_in_range` in `pipelines/silver/transactions.sql`, the expected number of
   days in `sql/checks/gold_reconciliation.sql`, and check the holiday API covers the new years.
+
+## CI is red on `main`
+
+- **Symptom:** the CI badge in the README is red, or a pull request shows a failed check.
+- **Find the step:** `gh run list --branch main --limit 3`, then `gh run view <run-id> --log-failed`.
+  The workflow (`.github/workflows/ci.yml`) installs the locked dependencies, runs the same
+  pre-commit hooks as a local commit, then runs the tests.
+- **Reproduce it on your machine before changing anything:** `uv sync`, then
+  `uv run pre-commit run --all-files`, then `uv run pytest`. If it fails the same way, fix it
+  locally. If it only fails in CI, the difference is the environment (see below).
+- **Common causes:**
+  - `uv sync --locked` fails: `pyproject.toml` changed without the lockfile. Run `uv lock` and commit
+    `uv.lock`.
+  - A hook rewrote a file (formatting, a trailing newline): run the hooks locally and commit the result.
+  - A SQL test is skipped or fails only in CI: the SQL tests need Java 17 to 21 and PySpark. Locally they
+    skip with a message if Java is missing, so a pass on a machine without Java proves nothing about them.
+  - The runner or an action changed: the runner image is pinned (`ubuntu-24.04`), so this only happens
+    when someone changes the pin.
+- **Fix:** fix forward in a pull request, or revert the commit that broke it. `main` is not protected,
+  so nothing stops a merge on red: a failed check on a pull request is advice, not a gate (a decision
+  recorded for Phase 6).
+- **Prevent:** run `uv run pre-commit run --all-files` and `uv run pytest` before pushing.

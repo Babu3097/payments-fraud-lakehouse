@@ -83,9 +83,16 @@ SELECT
     (
         SELECT coalesce(sum(cast(get_json_object(q.raw_record, '$.amount') AS DECIMAL(18, 2))), 0)
         FROM (
+            -- The first time each event was quarantined. Plain row_number and a filter, not
+            -- QUALIFY, so the same SQL runs in open-source Spark (the unit tests need that).
             SELECT raw_record
-            FROM workspace.silver.transactions_quarantine
-            QUALIFY row_number() OVER (PARTITION BY event_id ORDER BY quarantined_at) = 1
+            FROM (
+                SELECT
+                    raw_record,
+                    row_number() OVER (PARTITION BY event_id ORDER BY quarantined_at) AS seen_order
+                FROM workspace.silver.transactions_quarantine
+            ) AS ranked
+            WHERE seen_order = 1
         ) AS q
     ) AS quarantined_amount,
     (SELECT count(*) FROM workspace.silver.transactions) AS silver_rows,

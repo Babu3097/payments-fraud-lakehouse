@@ -159,4 +159,42 @@ databricks bundle run payments_lakehouse_daily -t dev [--params run_date=YYYY-MM
   holds) or 2026-10-04 (wall clock); until then docs call it intent. (3) Interview questions Q16 to
   Q18 for Phase 5; warm-ups A and B and Q13 to Q15 are still open. Next: PR (ask first), then wait
   for the user's OK before Phase 6.
+- **Phase 5 is merged (PR 4).**
+- **Phase 6 (IN PROGRESS on local branch `phase-6-quality`; NOTHING PUSHED; check `git status` and
+  `git log` for what is committed):** the usage limit ended the session here. User decisions: SQL
+  tests with local PySpark; DQ summary = history table plus views in a new schema `workspace.quality`;
+  guardrails = ONLY the identifier guard in pre-commit (not branch protection, not a weekly CI run,
+  not Dependabot). Findings from the new tests, all approved and fixed in the SQL: BAD_TIMESTAMP now
+  requires YYYY-MM-DDTHH:MM:SSZ (a time-only text used to get the run date); an unknown status is
+  quarantined as the new code UNKNOWN_STATUS, and a missing event_id or status is NULL_REQUIRED_FIELD
+  (one new code, not two); the newest holiday payload is the whole calendar. Two `QUALIFY` uses were
+  rewritten as row_number plus a filter (silver/bank_holidays.sql, gold/reconciliation.sql) so local
+  Spark can run them. silver_reconciliation.sql gained one check (UNKNOWN_STATUS expected 0), so
+  there are now 67 checks (19 bronze, 26 silver, 22 gold). None of these SQL changes is deployed yet.
+  DONE locally: Temurin JDK 17.0.20.1 (sha256 verified) in ~/.local/jdk-17, found automatically by
+  tests/helpers/spark_support.py; `uv sync` installs PySpark (default-groups dev+sql; CI lint and unit
+  jobs should use --no-group sql); tests/helpers/lakeflow_sql.py reads the Lakeflow SQL (with its own
+  tests); tests/sql/* (about 270 tests: silver unify and split, safety net, holidays, profile, gold
+  dimensions, fact, KPIs, rule views, and the reconciliation gate with 12 corruptions); tests/
+  test_contracts.py, test_bundle_config.py, test_docs.py; entry-point tests for checks.main,
+  generator.main and holidays.main; pytest-cov and pyyaml in the dev group. Last runs: the non-SQL
+  suite and every SQL file passed separately; the SQL suite was not re-run as one after the final
+  formatting; test_docs.py was only just written.
+  NOT DONE: (1) fix whatever test_docs.py reports, and write the runbook scenario "CI is red on
+  main" (the table row still says Phase 6); (2) the identifier guard (a tested module in src, a local
+  pre-commit hook, personal names in the gitignored private/forbidden_patterns.txt); (3) CI: split
+  into lint, unit and sql jobs (setup-java Temurin 17, `uv sync --locked --group sql` for the sql job),
+  coverage with a fail-under near 95 (measure first), `.coverage` in .gitignore; (4) the SQL
+  mutation round (only one mutation done so far); (5) the data quality summary in the workspace: schema
+  workspace.quality, check_results appended by the verify task plus pipeline expectation metrics,
+  scorecard and daily views, docs/data_quality.md (needs approval before any deploy); (6) the
+  in-platform proof for the SQL changes: deploy, then a full refresh of silver and gold with content
+  fingerprints identical before and after (take a fresh baseline first), then a job run; (7) ADRs
+  (testing strategy, the three findings, the identifier guard, the DQ summary), runbook,
+  LEARNING_NOTES, private notes, README tick, and the PR (ask first). Interview questions Q16 to Q18
+  from Phase 5 are still unanswered.
+  Gotchas: macOS allows only 1333 threads per user, so the SQL tests cap Spark's threads and
+  checkpoint each table (tests/sql/conftest.py, steps.py); the reconciliation tests take about 110 s;
+  run `uv run pytest -m sql` for Spark tests and `-m "not sql"` for the rest; macOS has no `timeout`
+  command.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.

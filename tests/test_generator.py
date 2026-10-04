@@ -14,6 +14,7 @@ from payments_lakehouse.generator import (
     GeneratorConfig,
     entity_state,
     landing_main,
+    main,
     profile_events_for_day,
     resolve_date,
     transactions_for_day,
@@ -259,3 +260,15 @@ def test_an_unresolved_job_reference_fails_instead_of_picking_a_day(tmp_path):
     # If the platform ever passed the placeholder through literally, the task must fail loudly.
     with pytest.raises(SystemExit):
         landing_main(["--landing", str(tmp_path), "--today", "{{job.start_time.iso_date}}"])
+
+
+def test_the_local_command_writes_the_days_files_and_reports_their_counts(tmp_path, capsys):
+    main(["--start", "2026-09-20", "--end", "2026-09-20", "--out", str(tmp_path)])
+    manifest = json.loads((tmp_path / "manifest_2026-09-20.json").read_text())
+    out = capsys.readouterr().out
+    assert out.startswith("2026-09-20: ") and f"{manifest['rows_written']:,} rows" in out
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "customer_profile_2026-09-20.csv",
+        "manifest_2026-09-20.json",
+        "transactions_2026-09-20.jsonl",
+    ]

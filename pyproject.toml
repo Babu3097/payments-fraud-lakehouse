@@ -36,11 +36,24 @@ select = ["E", "W", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "sql: runs the pipeline SQL in a local Spark session (needs Java 17+ and the sql dependency group)",
+]
 
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
+    "pytest-cov>=6",
+    "pyyaml>=6",
     "ruff>=0.16.10",
     "sqlfluff>=4.4.0",
 ]
+sql = [
+    "pyspark>=4.0,<4.1",
+]
+
+[tool.uv]
+# A plain `uv sync` installs PySpark too, so the SQL tests run locally. CI's lint and unit jobs
+# leave it out with --no-group sql, because they do not need the 300 MB download.
+default-groups = ["dev", "sql"]

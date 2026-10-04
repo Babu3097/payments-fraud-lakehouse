@@ -1,3 +1,5 @@
+import sys
+import types
 from decimal import Decimal
 
 import pytest
@@ -5,6 +7,7 @@ import pytest
 from payments_lakehouse.checks import (
     failures,
     format_report,
+    main,
     run_all,
     run_suite,
     strip_comments,
@@ -93,3 +96,68 @@ def test_whole_numbers_print_without_decimals_but_real_decimals_keep_them(tmp_pa
     report = format_report(run_suite(path, lambda sql: rows))
     assert "count: expected 1097, actual 1096" in report
     assert "sum: expected 12.50, actual 3" in report
+
+
+class FakeSpark:
+    """Stands in for the Spark session of a Databricks task: records the SQL, returns set rows."""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.sent = []
+
+    def sql(self, text):
+        self.sent.append(text)
+        return self
+
+    def collect(self):
+        return self.rows
+
+
+def use_fake_spark(monkeypatch, rows):
+    spark = FakeSpark(rows)
+    sql_module = types.ModuleType("pyspark.sql")
+    sql_module.SparkSession = types.SimpleNamespace(
+        builder=types.SimpleNamespace(getOrCreate=lambda: spark)
+    )
+    root = types.ModuleType("pyspark")
+    root.sql = sql_module
+    monkeypatch.setitem(sys.modules, "pyspark", root)
+    monkeypatch.setitem(sys.modules, "pyspark.sql", sql_module)
+    return spark
+
+
+def test_the_job_command_passes_quietly_when_every_check_is_true(tmp_path, monkeypatch, capsys):
+    write_suite(tmp_path, "bronze_reconciliation.sql", "-- header\nSELECT 1")
+    spark = use_fake_spark(monkeypatch, [("a", 1, 1, True), ("b", 2, 2, "true")])
+    main(["--checks-dir", str(tmp_path)])  # returns: the task succeeds
+    assert capsys.readouterr().out.strip() == "2 of 2 checks passed"
+    assert spark.sent == ["SELECT 1"]  # the comment never reaches Spark
+
+
+def test_the_job_command_exits_with_the_report_when_a_check_is_false(tmp_path, monkeypatch, capsys):
+    # This is the line that fails the job and sends the alert email, so it is tested directly.
+    write_suite(tmp_path, "gold_reconciliation.sql")
+    use_fake_spark(
+        monkeypatch, [("good", 1, 1, True), ("dim_date: days", Decimal("1097.00"), 1096, False)]
+    )
+    with pytest.raises(SystemExit) as stopped:
+        main(["--checks-dir", str(tmp_path)])
+    report = stopped.value.code
+    assert isinstance(report, str)  # a message, so Python exits with status 1 and shows it
+    assert report.splitlines() == [
+        "1 of 2 checks passed",
+        "FAILED [gold_reconciliation] dim_date: days: expected 1097, actual 1096",
+    ]
+    assert capsys.readouterr().out.startswith("1 of 2 checks passed")
+
+
+def test_the_job_command_raises_when_there_is_nothing_to_check(tmp_path, monkeypatch):
+    use_fake_spark(monkeypatch, [("a", 1, 1, True)])
+    with pytest.raises(RuntimeError, match="no .*_reconciliation.sql files"):
+        main(["--checks-dir", str(tmp_path)])
+
+
+def test_the_job_command_needs_to_be_told_where_the_checks_are():
+    with pytest.raises(SystemExit) as stopped:
+        main([])
+    assert stopped.value.code == 2  # argparse's own usage error
