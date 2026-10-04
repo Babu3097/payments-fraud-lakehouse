@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Least privilege: CI only needs to read the repo.
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the older, now-pointless run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      # --locked fails the build if uv.lock is out of date with pyproject.toml.
+      - name: Install pinned dependencies
+        run: uv sync --locked
+
+      # The very same hooks developers run on `git commit` (ruff, sqlfluff, hygiene checks).
+      - name: Lint
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+      - name: Unit tests
+        run: uv run pytest

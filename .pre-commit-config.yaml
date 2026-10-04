@@ -1,0 +1,33 @@
+# Runs automatically on `git commit`. CI runs the same hooks (see .github/workflows/ci.yml).
+# ruff and sqlfluff run through `uv run`, so their versions come from uv.lock only
+# (one source of truth, no drift between hooks and CI; see docs/decisions.md, ADR-004).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: sqlfluff-lint
+        name: sqlfluff lint
+        entry: uv run sqlfluff lint
+        language: system
+        types: [sql]

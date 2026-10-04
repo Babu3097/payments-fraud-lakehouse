@@ -1,0 +1,36 @@
+[project]
+name = "payments-lakehouse"
+version = "0.1.0"
+description = "Payments fraud-monitoring lakehouse on Databricks: bronze/silver/gold, Lakeflow pipelines, Asset Bundles."
+readme = "README.md"
+# Databricks serverless environment versions 3-6 run Python 3.12.3, so we stay on 3.12 (see docs/decisions.md, ADR-001).
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/payments_lakehouse"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes (unused names, undefined names), I: import order,
+# B: likely bugs (flake8-bugbear), UP: modernise syntax for Python 3.12
+select = ["E", "W", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+    "sqlfluff>=4.4.0",
+]

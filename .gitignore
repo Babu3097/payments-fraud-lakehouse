@@ -1,0 +1,27 @@
+# Python environments and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local tooling state (Databricks CLI, editors, OS)
+.databricks/
+.claude/settings.local.json
+.vscode/
+.idea/
+.DS_Store
+
+# Data: never commit raw or generated data (PaySim alone is ~470 MB)
+data/
+*.csv
+*.parquet
+!tests/fixtures/*.csv
+
+# Secrets
+.env
+.env.*
+*.pem
+
+# Personal prep notes (interview answers, CV drafts): kept on this Mac only
+private/

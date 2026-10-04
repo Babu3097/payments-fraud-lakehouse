@@ -1,0 +1,5 @@
+[sqlfluff]
+# Databricks SQL dialect, so Delta/Unity Catalog syntax parses correctly
+dialect = databricks
+templater = raw
+max_line_length = 100
