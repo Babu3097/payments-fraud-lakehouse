@@ -37,4 +37,30 @@ makes it stick for interviews.
 
 ## Phase 1: repo skeleton
 
-*(to be filled in as Phase 1 completes: pre-commit, CI, the reason for each folder)*
+### Pre-commit and CI do different jobs
+- **Pre-commit** gives fast feedback on my own machine before a commit exists. But hooks live in
+  `.git/hooks/` on my Mac only, can be skipped with `--no-verify`, never run for edits made in
+  GitHub's web editor, and only see the files being committed.
+- **CI** runs on every push, whoever pushed and however, on a clean machine, and also runs the
+  slower tests. Hooks protect me, CI protects the repo.
+- My hooks run through `uv run`, so ruff's version comes only from `uv.lock`. Pinning it in two
+  places (hook config and lockfile) lets them drift, so a commit could pass locally and fail in CI.
+
+### `pyproject.toml` is the wish list, `uv.lock` is the receipt
+- `pyproject.toml` says "I want requests 2 or newer". `uv.lock` records the exact version and
+  checksum of every package that was actually tested.
+- `uv sync --locked` in CI fails if the two disagree, and changes nothing. Plain `uv sync` would
+  quietly re-resolve and rewrite the lockfile. I saw this happen in a throwaway copy.
+- Fix for a failure: `uv lock` and commit `uv.lock`. Better habit: `uv add <pkg>` keeps both in sync.
+
+### Keeping data out of Git
+- Two layers: `.gitignore` (patterns such as `data/`, `*.csv`) and the pre-commit
+  `check-added-large-files` hook (500 KB). A file renamed to `.txt` slips past the first, but the
+  size hook blocks it at `git commit`. CI only detects it afterwards, and GitHub rejects files over
+  100 MB as a last backstop.
+- Git keeps every version forever, so a big file committed once stays in history. Code lives in
+  Git, data lives in the lakehouse (a Unity Catalog volume).
+
+### Testing the guards
+- A check that has never failed is not proven. I planted an unused import, messy SQL, a fake
+  private-key header and a 1 MB file, watched each hook reject them, then deleted them.

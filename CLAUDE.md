@@ -74,5 +74,10 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
 - **Phase 0 (done):** Homebrew, uv (Python 3.12), Databricks CLI, GitHub login, Databricks OAuth
   login and a test SQL query, AI Dev Kit plugin. Gotcha: Homebrew compiles from source on
   macOS 14, so uv was installed with the vendor installer.
-- **Phase 1 (in progress):** repo skeleton, pre-commit hooks, CI workflow, docs and ADRs created
-  locally. Remaining: first commit, push to GitHub, confirm CI is green.
+- **Phase 1 (done):** repo skeleton, 10 pre-commit hooks (proven to reject bad code, a fake
+  private key and a 1 MB file), CI workflow, docs and 4 ADRs. 22 files pushed to the public repo
+  and the first CI run was green in 19 s. Checked against Databricks docs: serverless
+  environments 3-6 run Python 3.12.3.
+- **Next (Phase 2, bronze):** first decide how the generator fills two PaySim gaps: no customer
+  attributes (SCD2 would be artificial) and no approved/declined status (see
+  `docs/data_model.md`, open questions). The user downloads PaySim from Kaggle themselves.

@@ -42,7 +42,9 @@ bottom. Status is one of: Accepted, Open, Superseded.
 
 - **Status:** Accepted
 - **Decision:** The pre-commit hooks for ruff and sqlfluff run via `uv run`, so their versions
-  come from `uv.lock`. CI runs the same pre-commit hooks, then pytest.
+  come from `uv.lock`. CI runs the same pre-commit hooks, then pytest. The CI runner is pinned
+  to `ubuntu-24.04` instead of `ubuntu-latest` (GitHub moves "latest" to Ubuntu 26 on
+  19 October 2026), so the operating system image only changes when we choose.
 - **Why:** Pinning versions in both a hook config and a lockfile lets them drift, so a commit can
   pass locally and fail in CI. Hooks catch problems in seconds on the laptop. CI is the
   enforcement, because hooks can be skipped with `--no-verify`.
