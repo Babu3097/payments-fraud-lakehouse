@@ -1,0 +1,99 @@
+# The daily job: land the day's files, pull the holiday calendar, refresh the pipeline, then run
+# the reconciliation checks. A failed task fails the job and sends the alert email (ADR-021, 022).
+#
+#   generate_daily_files --+
+#                          +--> refresh_pipeline --> verify
+#   pull_holidays ---------+
+#
+# Serverless: no cluster is declared, only the Python environment the wheel tasks share.
+resources:
+  jobs:
+    payments_lakehouse_daily:
+      name: payments_lakehouse_daily
+      description: >-
+        Lands yesterday's feed files, refreshes bronze, silver and gold, then runs every
+        reconciliation check. Any failed check fails the run.
+
+      # 06:00 London, after the day's files are complete. Active as soon as it is deployed.
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: Europe/London
+        pause_status: UNPAUSED
+
+      # One run at a time. A second trigger waits in the queue instead of being skipped, because a
+      # skipped day would be silent.
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+
+      # Normal runs take minutes. A run still going after an hour is stuck, so stop it and alert.
+      timeout_seconds: 3600
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 1800
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+        on_duration_warning_threshold_exceeded:
+          - ${var.alert_email}
+
+      # "yesterday" is measured from the run's own start date (see generate_daily_files). To land
+      # a particular day by hand, use Run now with different parameters and give a date.
+      parameters:
+        - name: run_date
+          default: yesterday
+
+      tasks:
+        - task_key: generate_daily_files
+          environment_key: default
+          python_wheel_task:
+            package_name: payments_lakehouse
+            entry_point: generate-day
+            parameters:
+              - --landing
+              - /Volumes/${var.catalog}/bronze/landing
+              - --date
+              - "{{job.parameters.run_date}}"
+              # The run's start date (UTC), so a repair run on a later day lands the same files.
+              - --today
+              - "{{job.start_time.iso_date}}"
+
+        - task_key: pull_holidays
+          environment_key: default
+          python_wheel_task:
+            package_name: payments_lakehouse
+            entry_point: pull-holidays
+            parameters:
+              - --dest
+              - /Volumes/${var.catalog}/bronze/landing/bank_holidays
+
+        - task_key: refresh_pipeline
+          depends_on:
+            - task_key: generate_daily_files
+            - task_key: pull_holidays
+          # One retry after two minutes covers a transient platform failure. The pipeline stops
+          # and restarts itself when a new column appears, which a retry also covers.
+          max_retries: 1
+          min_retry_interval_millis: 120000
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.payments_pipeline.id}
+
+        - task_key: verify
+          depends_on:
+            - task_key: refresh_pipeline
+          environment_key: default
+          python_wheel_task:
+            package_name: payments_lakehouse
+            entry_point: run-checks
+            parameters:
+              - --checks-dir
+              - ${workspace.file_path}/sql/checks
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - ../dist/*.whl

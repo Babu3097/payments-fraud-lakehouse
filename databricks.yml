@@ -1,6 +1,6 @@
 # Asset Bundle root: the whole project described as code and deployed with `databricks bundle deploy`.
-# Phase 2 starts it small (one pipeline, one job, dev target). Phase 5 adds the schedule, failure
-# alerts and a prod target. See docs/decisions.md, ADR-007.
+# One pipeline, one daily job, a dev target that is deployed and a prod target that is only defined
+# and validated. See docs/decisions.md, ADR-007 and ADR-022.
 bundle:
   name: payments_lakehouse
 
@@ -18,12 +18,28 @@ variables:
   catalog:
     description: Unity Catalog catalog that holds the bronze, silver and gold schemas
     default: workspace
+  alert_email:
+    description: >-
+      Who gets the failure alert. It defaults to the account that deploys, filled in at deploy
+      time, so no address is ever committed.
+    default: ${workspace.current_user.userName}
 
 targets:
   dev:
-    # development mode prefixes resource names with the user and pauses any schedule
+    # development mode prefixes resource names with the user and, unless a schedule says
+    # pause_status itself, pauses it. The daily job says UNPAUSED, so it runs.
     mode: development
     default: true
     workspace:
       # The profile name lives in ~/.databrickscfg. The workspace URL is never committed.
       profile: DEFAULT
+
+  prod:
+    # Defined and checked with `databricks bundle validate -t prod`, but not deployed: Free
+    # Edition has one workspace and one catalog, so a second copy would write into the same
+    # tables as dev. On a paid account this target would point at its own workspace and catalog
+    # and run as a service principal rather than as a person.
+    mode: production
+    workspace:
+      profile: DEFAULT
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
