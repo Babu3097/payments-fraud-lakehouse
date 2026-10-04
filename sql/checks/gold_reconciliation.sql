@@ -91,14 +91,14 @@ checks AS (
     UNION ALL
     SELECT
         'dim_date: calendar days' AS check_name,
-        365 AS expected,
+        1096 AS expected,
         count(*) AS actual
     FROM workspace.gold.dim_date
     UNION ALL
     SELECT
         'dim_date: England and Wales bank holidays in 2026' AS check_name,
         8 AS expected,
-        count_if(is_bank_holiday_eaw) AS actual
+        count_if(is_bank_holiday_eaw AND calendar_year = 2026) AS actual
     FROM workspace.gold.dim_date
     UNION ALL
     SELECT

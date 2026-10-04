@@ -23,7 +23,7 @@ CREATE OR REFRESH STREAMING TABLE workspace.silver.transactions (
     CONSTRAINT decline_has_reason EXPECT (status = 'APPROVED' OR decline_reason IS NOT NULL),
     CONSTRAINT counterparty_present EXPECT (counterparty_id IS NOT NULL),
     CONSTRAINT event_date_in_range EXPECT (
-        event_date BETWEEN DATE '2026-08-20' AND DATE '2026-12-31'
+        event_date BETWEEN DATE '2026-08-20' AND DATE '2028-12-31'
     )
 )
 COMMENT 'Clean, deduplicated transactions from every source, one row per event_id';

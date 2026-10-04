@@ -1,4 +1,6 @@
--- Gold: one row per calendar day of 2026, with the bank holidays of the three UK regions.
+-- Gold: one row per calendar day, 2026 to 2028, with the bank holidays of the three UK regions.
+-- 2028 is as far as the holiday API goes. The range must outlast the daily job, or the day it ends
+-- every new transaction has no date row and the reconciliation fails the run.
 -- Holiday data comes from silver.bank_holidays (parsed from the GOV.UK payload). England and Wales
 -- is the headline flag; Scotland and Northern Ireland are kept so a customer's region can pick the
 -- right calendar later (ADR-015). date_key is the usual yyyymmdd integer.
@@ -21,7 +23,7 @@ WITH holidays AS (
 ),
 
 calendar AS (
-    SELECT EXPLODE(SEQUENCE(DATE '2026-01-01', DATE '2026-12-31', INTERVAL 1 DAY)) AS calendar_date
+    SELECT EXPLODE(SEQUENCE(DATE '2026-01-01', DATE '2028-12-31', INTERVAL 1 DAY)) AS calendar_date
 )
 
 SELECT

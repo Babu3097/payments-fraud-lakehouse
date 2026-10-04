@@ -46,6 +46,26 @@ you log in (step 2). Check the bundle without deploying anything: `databricks bu
 Optional: install the Databricks AI Tools skills for Claude Code, scoped to this project:
 `databricks aitools install --agents claude-code --scope project`
 
+## 4. Deploy and run the daily job
+
+```bash
+databricks bundle validate --strict -t dev   # check the YAML, change nothing
+databricks bundle deploy -t dev              # build the wheel, then create or update the job and pipeline
+databricks bundle run payments_lakehouse_daily -t dev                          # one run now
+databricks bundle run payments_lakehouse_daily -t dev --params run_date=2026-10-06   # a particular day
+```
+
+- **What deploy does:** it makes the workspace match the repository, which includes deleting a
+  resource whose file you removed. The `dev` target prefixes names with your user name.
+- **The schedule is live after deploy:** 06:00 Europe/London every day. To pause it, set
+  `pause_status: PAUSED` in `resources/daily.job.yml` and deploy again (see the runbook).
+- **Who gets the alert:** the account that deploys, filled in at deploy time. To send it elsewhere,
+  add `--var alert_email=<address>` to the deploy. The address is never stored in the repository.
+- **The `prod` target** is only validated: `databricks bundle validate --strict -t prod`. Free Edition
+  has one workspace and one catalog, so deploying it would write into the same tables as `dev`.
+- **Compute and cost:** everything is serverless, so there is no cluster to size or stop, and Free
+  Edition has no bill. A normal run takes about 8 minutes of serverless time a day.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -53,3 +73,5 @@ Optional: install the Databricks AI Tools skills for Claude Code, scoped to this
 | `command not found: databricks` in a terminal that was already open | `~/.zprofile` is only read when a shell starts | Open a new terminal tab |
 | `brew install uv` starts compiling CMake and Rust | On older macOS versions Homebrew has no prebuilt packages (Tier 3), so it builds from source | Stop it and use the vendor installer shown above |
 | `brew install databricks` says no formula | The CLI is not in the main Homebrew catalogue | Use `brew install databricks/tap/databricks` |
+| `bundle deploy` says a build command is not found | `uv` is not on the PATH of the shell running the build | Open a new terminal tab, or run `export PATH="$HOME/.local/bin:$PATH"` first |
+| The deploy removed a job I still wanted | A resource whose file is gone from the repository is deleted on deploy | Restore the file from Git and deploy again |

@@ -8,7 +8,7 @@ monitoring questions. It uses the public [PaySim](https://www.kaggle.com/dataset
 dataset (synthetic mobile-money transactions with fraud labels), a Python generator that
 produces new daily transaction files, and a UK bank-holiday reference API.
 
-> **Status: work in progress (phases 0 to 4 of 7 complete: tooling, repo skeleton, bronze, silver, gold).**
+> **Status: work in progress (phases 0 to 5 of 7 complete: tooling, repo skeleton, bronze, silver, gold, automation).**
 > This README grows with the project. See the [roadmap](#roadmap).
 
 ## Questions it will answer
@@ -38,9 +38,9 @@ ruff and sqlfluff with pre-commit · GitHub Actions
 | `src/` | Reusable, unit-tested Python (generator, API client, helpers) |
 | `pipelines/` | Code that runs on Databricks (Lakeflow pipelines, Auto Loader) |
 | `sql/` | Standalone SQL: setup, KPIs, reconciliation checks |
-| `resources/` | Asset Bundle resource definitions (jobs, pipelines) |
+| `resources/` | Asset Bundle resource definitions: the pipeline and the daily job |
 | `tests/` | pytest unit tests |
-| `docs/` | Architecture, data model, setup guide, runbook, design decisions |
+| `docs/` | Architecture, data model, setup guide, runbook, design decisions, [the job in Airflow terms](docs/airflow.md) |
 
 ## Data and attribution
 
@@ -64,6 +64,6 @@ logged in [docs/decisions.md](docs/decisions.md).
 - [x] Phase 2: bronze (PaySim, generator, API, Auto Loader)
 - [x] Phase 3: silver (typing, dedup, expectations, quarantine)
 - [x] Phase 4: gold (star schema, SCD2, KPIs, reconciliation)
-- [ ] Phase 5: automation (scheduled job, alerts, Asset Bundle, idempotency)
+- [x] Phase 5: automation (scheduled job, alerts, Asset Bundle, idempotency)
 - [ ] Phase 6: quality (tests, CI, data quality summary)
 - [ ] Phase 7: reporting (Power BI, dashboard, final README)

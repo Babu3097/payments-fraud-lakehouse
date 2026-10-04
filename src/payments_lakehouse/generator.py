@@ -56,6 +56,7 @@ CUSTOMER_SEGMENTS = ("mass_market", "premium", "student", "small_business")
 CUSTOMER_SEGMENT_WEIGHTS = (60, 15, 15, 10)
 MERCHANT_SEGMENTS = ("retail", "food_and_drink", "travel", "utilities")
 CHANNELS = ("app", "agent", "pos")
+DEVICES = ("android", "ios", "web", "ussd")
 DECLINE_REASONS = ("INSUFFICIENT_FUNDS", "LIMIT_EXCEEDED", "CARD_BLOCKED")
 BAD_TYPES = ("REFUND", "CHARGEBACK", "ADJUSTMENT")
 BAD_TIMESTAMPS = ("not-a-timestamp", "2026-13-45T99:99:99Z")
@@ -74,6 +75,7 @@ class GeneratorConfig:
     merchants: int = 5_000
     initial_date: date = date(2026, 9, 20)  # day of the initial customer load (ADR-008)
     channel_from: date = date(2026, 9, 28)  # the deliberate schema change: a new field appears
+    device_from: date = date(2026, 10, 6)  # a second planned schema change (ADR-012)
     daily_change_rate: float = 0.005
     fraud_rate: float = 0.003
     decline_rate: float = 0.03
@@ -237,11 +239,14 @@ def transactions_for_day(cfg: GeneratorConfig, day: date) -> tuple[list[dict], d
     entries.sort(key=lambda entry: entry[0])
 
     with_channel = day >= cfg.channel_from
+    with_device = day >= cfg.device_from
     rows = []
     for i, (ts, body) in enumerate(entries, start=1):
         row = {"event_id": f"T{day:%Y%m%d}{i:06d}", "event_ts": ts.strftime(TS_FORMAT), **body}
         if with_channel:
             row["channel"] = rng.choice(CHANNELS)
+        if with_device:
+            row["device_type"] = rng.choice(DEVICES)
         rows.append(row)
     declined = sum(row["status"] == "DECLINED" for row in rows)
 
@@ -349,11 +354,19 @@ def profile_events_for_day(cfg: GeneratorConfig, day: date) -> list[ProfileEvent
 # --- writing files -----------------------------------------------------------------------
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    """Write to a temp name, then rename. A half-written file must never be picked up."""
+def _atomic_write(path: Path, text: str) -> bool:
+    """Write to a temp name, then rename: a half-written file must never be picked up.
+
+    A file that already holds exactly this content is left alone, so rerunning a day is a true
+    no-op. Returns whether the file was written.
+    """
+    data = text.encode("utf-8")
+    if path.exists() and path.read_bytes() == data:
+        return False
     temp = path.with_name(path.name + ".tmp")
-    temp.write_text(text, encoding="utf-8", newline="")
+    temp.write_bytes(data)
     os.replace(temp, path)
+    return True
 
 
 def _profile_csv(events: list[ProfileEvent]) -> str:
@@ -367,21 +380,82 @@ def _profile_csv(events: list[ProfileEvent]) -> str:
     return buffer.getvalue()
 
 
-def write_day(cfg: GeneratorConfig, day: date, out_dir: Path) -> dict:
-    """Write the three files for `day` and return its manifest."""
-    out_dir.mkdir(parents=True, exist_ok=True)
+def _day_files(cfg: GeneratorConfig, day: date) -> tuple[dict[str, str], dict]:
+    """The text of the three files for `day`, and its manifest."""
     rows, manifest = transactions_for_day(cfg, day)
     events = profile_events_for_day(cfg, day)
     manifest["profile_rows"] = len(events)
-
     lines = (json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
-    _atomic_write(out_dir / f"transactions_{day.isoformat()}.jsonl", "".join(lines))
-    _atomic_write(out_dir / f"customer_profile_{day.isoformat()}.csv", _profile_csv(events))
-    _atomic_write(
-        out_dir / f"manifest_{day.isoformat()}.json",
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-    )
+    texts = {
+        "transactions": "".join(lines),
+        "profile": _profile_csv(events),
+        "manifest": json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+    }
+    return texts, manifest
+
+
+def write_day(cfg: GeneratorConfig, day: date, out_dir: Path) -> dict:
+    """Write the three files for `day` into one folder and return its manifest."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    texts, manifest = _day_files(cfg, day)
+    iso = day.isoformat()
+    _atomic_write(out_dir / f"transactions_{iso}.jsonl", texts["transactions"])
+    _atomic_write(out_dir / f"customer_profile_{iso}.csv", texts["profile"])
+    _atomic_write(out_dir / f"manifest_{iso}.json", texts["manifest"])
     return manifest
+
+
+def write_day_to_landing(cfg: GeneratorConfig, day: date, landing: Path) -> dict[str, bool]:
+    """Write the day's files into the landing layout; returns file name -> whether it was written.
+
+    Same bytes as `write_day`, but each file goes to the folder its Auto Loader reads. Running a
+    day again rewrites nothing, because the content is identical (deterministic generation).
+    """
+    iso = day.isoformat()
+    texts, _ = _day_files(cfg, day)
+    targets = {
+        f"transactions_{iso}.jsonl": ("transactions_daily", texts["transactions"]),
+        f"customer_profile_{iso}.csv": ("customer_profile", texts["profile"]),
+        f"manifest_{iso}.json": ("_manifests", texts["manifest"]),
+    }
+    written = {}
+    for name, (folder, text) in targets.items():
+        (landing / folder).mkdir(parents=True, exist_ok=True)
+        written[name] = _atomic_write(landing / folder / name, text)
+    return written
+
+
+def resolve_date(spec: str, today: date) -> date:
+    """Turn "yesterday", "today" or an ISO date into a date."""
+    if spec == "yesterday":
+        return today - timedelta(days=1)
+    if spec == "today":
+        return today
+    return date.fromisoformat(spec)
+
+
+def landing_main(argv: list[str] | None = None) -> None:
+    """Entry point for the scheduled job: write one day's files straight into the landing volume."""
+    parser = argparse.ArgumentParser(
+        description="Write one day's feed files into the landing zone."
+    )
+    parser.add_argument("--landing", type=Path, required=True, help="landing volume root")
+    parser.add_argument("--date", default="yesterday", help='"yesterday", "today" or YYYY-MM-DD')
+    parser.add_argument(
+        "--today",
+        type=date.fromisoformat,
+        help="the date that yesterday and today are measured from (default: today in UTC); "
+        "the job passes its own start date, so the day chosen does not depend on when it runs",
+    )
+    parser.add_argument("--seed", type=int, default=GeneratorConfig.seed)
+    args = parser.parse_args(argv)
+
+    cfg = GeneratorConfig(seed=args.seed)
+    day = resolve_date(args.date, args.today or datetime.now(UTC).date())
+    if day < cfg.initial_date:
+        raise SystemExit(f"{day} is before the initial load on {cfg.initial_date}")
+    for name, was_written in write_day_to_landing(cfg, day, args.landing).items():
+        print(f"{'wrote' if was_written else 'unchanged'}: {name}")
 
 
 def main(argv: list[str] | None = None) -> None:

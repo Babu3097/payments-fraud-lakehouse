@@ -82,13 +82,19 @@ bottom. Status is one of: Accepted, Open, Superseded.
 
 ## ADR-007: Minimal Asset Bundle from Phase 2
 
-- **Status:** Accepted
-- **Decision:** `databricks.yml` plus one pipeline resource (dev target only) now. Phase 5 adds
-  the job, schedule, alerts and the prod target.
+- **Status:** Accepted; completed in Phase 5
+- **Decision:** `databricks.yml` plus one pipeline resource (dev target only) in Phase 2. Phase 5
+  added the daily job (ADR-021), its schedule and alerts (ADR-022), and a `prod` target that is
+  defined and checked with `databricks bundle validate -t prod` but never deployed.
 - **Why:** The pipeline is deployed from Git from day one, so there are no hand-made workspace
-  resources to migrate later.
+  resources to migrate later. The prod target is not deployed because Free Edition has one
+  workspace and one catalog, so a second copy would write into the same tables as dev. On a paid
+  account it would point at its own workspace and catalog and run as a service principal.
 - **Trade-offs:** Bundle concepts arrive earlier than the roadmap, and dev mode prefixes
-  resource names with the user.
+  resource names with the user. Deploying is also destructive on purpose: the Phase 5 deploy
+  deleted the old `pull_bank_holidays` job from the workspace because its file was gone from the
+  repo. The pipeline SQL names `workspace.` directly, so the `catalog` variable only moves the
+  volume path; a real prod catalog would need that SQL parameterised first.
 
 ## ADR-008: Fixed time anchor for PaySim
 
@@ -135,7 +141,7 @@ bottom. Status is one of: Accepted, Open, Superseded.
 
 ## ADR-012: Schema evolution: accept new columns, rescue conflicts, let the platform restart
 
-- **Status:** Accepted (observed 2026-10-04); the Phase 5 consequence is still to verify
+- **Status:** Accepted (observed 2026-10-04 by hand, and again inside the daily job)
 - **Decision:** Auto Loader runs with `addNewColumns`, so an extra column in the daily feed is
   added to the table. A value that conflicts with a declared type is rescued into `_rescued_data`.
   Loaders only read files that match their extension (`*.jsonl`, `*.csv`, `*.json`).
@@ -144,10 +150,18 @@ bottom. Status is one of: Accepted, Open, Superseded.
   cancelled it and started a new update itself (cause `SCHEMA_CHANGE`, 19 seconds), and every row
   landed exactly once (14 days of 40,400 rows, no duplicates, no rescues). The extension filter stops
   a temp or stray file from being read as data.
-- **Trade-offs:** The first update after a new column is reported as cancelled, so a scheduled job
-  could look failed although the data completed. Phase 5 adds a job retry and we test it. Silver
-  does not pick up a new column automatically: it selects columns explicitly, so a column becomes
-  visible downstream only by a deliberate change.
+- **In the daily job (a manual run on 2026-10-04; `device_type` first appears in the 6 October file):** the
+  job's pipeline task followed the platform's own restart. The first update was cancelled at 20:54:43
+  UTC "due to a schema change in workspace.bronze.transactions_daily, and will be restarted", an
+  update with cause `SCHEMA_CHANGE` started three seconds later and COMPLETED at 21:00:04, and the
+  task finished SUCCESS on attempt 0 after 484 s (292 s when nothing is new). The job retry was not
+  used. We had expected to need it, so this settles the question: a new column needs no special
+  handling in the job, and the retry stays as insurance for ordinary failures. `device_type` is in
+  bronze for exactly the 40,400 rows of that day, with nothing rescued.
+- **Trade-offs:** A schema change costs a second update and a second cold start, about two and a half
+  minutes here. Silver does not pick up a new column automatically: it selects columns explicitly, so
+  a column becomes visible downstream only by a deliberate change. That is intended: bronze absorbs
+  drift without losing data, and the layers with a contract change only by review.
 
 ## ADR-013: Silver deduplicates with Auto CDC (SCD Type 1) keyed on event_id
 
@@ -288,6 +302,93 @@ bottom. Status is one of: Accepted, Open, Superseded.
 - **Trade-offs:** The thresholds are our own choices, written at the top of each file, and the
   generated fraud was built from the same three patterns the rules look for, so recall on it is
   flattering. Real data would need rules tuned against real labels.
+
+## ADR-021: One daily job, four tasks, and a verify step that fails the run
+
+- **Status:** Accepted (verified 2026-10-04)
+- **Decision:** One Lakeflow Job, `payments_lakehouse_daily`, deployed by the bundle.
+  `generate_daily_files` and `pull_holidays` run side by side, then `refresh_pipeline` runs bronze,
+  silver and gold as one pipeline update, then `verify` runs every file in `sql/checks/` and fails
+  the task if any check is false. The two wheel tasks run this project's own package on serverless
+  compute; the pipeline task runs the existing pipeline.
+- **Why:** A job exists to make the order explicit: the pipeline cannot start before the day's files
+  are there, and nothing reports success before the checks have run. The two inputs do not depend on
+  each other, so they run in parallel. `verify` is separate from the pipeline's own `FAIL UPDATE`
+  constraints on purpose: those stop one pipeline update, while `verify` re-checks all three layers
+  against the landing files and the manifests (66 checks), and its failure is what fails the job and
+  sends the alert.
+- **Evidence:** a run with nothing new takes 7 min 41 s: generate and holidays about 35 s each in
+  parallel, the pipeline 292 s, verify 125 s.
+- **Trade-offs:** Each wheel task is its own serverless session, so each pays about 30 s of start-up.
+  `verify` runs after gold has already published, so a failed check means the data is in doubt, not
+  that it was held back (ADR-017). The standalone `pull_bank_holidays` job is gone; that step now runs
+  only as part of this job (`databricks bundle run payments_lakehouse_daily --only pull_holidays`).
+
+## ADR-022: Alerts, retries and limits for the daily job
+
+- **Status:** Accepted (alert path proven 2026-10-04)
+- **Decision:** The job emails when a run fails and when a run passes 30 minutes, stops a run at one
+  hour, allows one run at a time with a second queued, and retries the pipeline task once after two
+  minutes. The recipient is the bundle variable `alert_email`, which defaults to the account that
+  deploys and is filled in at deploy time, so no address is ever committed.
+- **Why:** Email needs no extra service on Free Edition. Alerting on failure only keeps the signal
+  meaningful. Queueing instead of skipping means a manual run near 06:00 cannot silently cost the day.
+  The retry covers a transient platform failure of the pipeline, such as no compute at that moment.
+- **Evidence:** the alert was tested end to end. One check was changed to demand 1,097 calendar days
+  instead of 1,096. `verify` failed with "65 of 66 checks passed" and the named check, the job
+  failed, and the email reached the account owner's inbox (confirmed by them). Reverting the check
+  (hash identical to the commit), redeploying and repairing the run re-ran only `verify`, which
+  passed in about a minute, and the same run turned green.
+- **Retries, as observed:** serverless task compute has auto-optimization, which retries failed tasks
+  by itself and is on by default. The failing `verify` ran twice (67 s and 49 s) although no retry is
+  configured on it. The Databricks docs say job-level notifications are not sent when a failed task is
+  retried, so the email arrives only when the run ends. We leave auto-optimization on because every
+  task is idempotent (ADR-023), so a retry is safe. The explicit retry on the pipeline task is separate,
+  because a pipeline task does not run on that compute.
+- **Trade-offs:** A deterministic failure, which a real data problem is, alerts about a minute later
+  than it could, and a hard gold failure costs one extra pipeline update. One person gets the email; a
+  team would use a shared address or a chat destination. The 30-minute and 1-hour limits are guesses
+  from a 7.5-minute run and should be revisited with real run history.
+
+## ADR-023: A rerun is safe by construction, and we proved it
+
+- **Status:** Accepted (verified 2026-10-04)
+- **Decision:** Every step is written so that doing it twice gives the same result. The generator
+  skips a file whose bytes already match and writes through a temporary file and a rename. The holiday
+  file's name is a hash of its content. Auto Loader remembers the files it has read. Silver is an
+  upsert on `event_id`. Gold is recomputed from silver. "Yesterday" is measured from the run's own
+  start date (passed as `--today`) and not from the wall clock, so the day chosen does not depend on
+  when the task happens to run. That this also holds for a repair run after midnight UTC is the
+  intent but has not been observed yet.
+- **Evidence:** (1) A run for an already-landed day: all three generated files and the holiday file
+  said `unchanged`, and 18 of 19 tables were identical in row count and content hash. Only `dim_date`
+  changed, from 365 to 1,096 rows, which was the intended change. For that day the cloud run found
+  the landed files already identical and wrote nothing. (2) The three files the cloud did write, for
+  6 October, were hashed against the same day generated on the laptop: identical sha256, including the
+  13.7 MB transactions file, so the generator is deterministic across machines (Linux serverless and
+  macOS, both Python 3.12). (3) A new day with a new column: 8 of 8 predicted row counts were exact.
+  (4) After a failure, a repair re-ran only `verify`.
+- **Why:** Jobs fail and get rerun by a tired person at 7am. If a rerun can duplicate or change data,
+  the runbook has to say "check first". If it cannot, the answer is always "just rerun".
+- **Trade-offs:** The skip compares bytes, so a change to the generator's code would overwrite an
+  already-landed file with different content, and Auto Loader would not read it again because it has
+  seen that file name. The bronze reconciliation compares bronze with the landing files, so that
+  divergence would fail the run, but the cure is deliberate (a new file name or a full refresh). A
+  real source file is never rewritten, so this is a synthetic-data problem only.
+
+## ADR-024: The calendar must outlast the job
+
+- **Status:** Accepted
+- **Decision:** `dim_date` covers 2026-01-01 to 2028-12-31 (1,096 days), the silver event-date bound
+  moves to the same end date, and the gold reconciliation expects 1,096 days.
+- **Why:** Found while designing the job, before it could bite. `dim_date` held only 2026, and a daily
+  job never stops. On 2027-01-01 the first transaction would have had no date row, `no_orphan_keys`
+  would have failed, and every run after that would have failed too. A one-off pipeline can use a
+  fixed range; a scheduled one cannot.
+- **Trade-offs:** The same time bomb now sits at the end of 2028, where the holiday API also stops,
+  so the runbook says to extend both together. Building the calendar from the first and last fact date
+  would hide the holiday coverage problem instead of fixing it, so the range stays explicit and the
+  check that would catch it stays strict.
 
 ## ADR-010: A deterministic generator with a manifest as ground truth
 
