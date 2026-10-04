@@ -116,3 +116,17 @@ bottom. Status is one of: Accepted, Open, Superseded.
   regions), so the restriction does not block it.
 - **Trade-offs:** If Databricks tightens the allow-list the pull would have to move outside the
   workspace. A single pipeline would need splitting if the project outgrew Free Edition.
+
+## ADR-010: A deterministic generator with a manifest as ground truth
+
+- **Status:** Accepted
+- **Decision:** Each day is seeded from (seed, date), uses only the standard library, writes files
+  atomically (temp file, then rename), and writes a manifest of exactly what it injected.
+  Customer attributes come from replaying the change events from the initial load, so any single
+  day can be regenerated on its own.
+- **Why:** Identical output for the same day makes reruns idempotent and tests exact. Atomic writes
+  mean a half-written file can never be picked up by Auto Loader. The manifest turns data quality
+  into something provable: silver's quarantine count can be compared with the injected defects.
+- **Trade-offs:** The data is synthetic, with defect rates and fraud patterns that we chose, so
+  the findings describe the pipeline and not the real world. The balances are a per-row snapshot,
+  not a ledger. Replaying state costs a little time, which is irrelevant at 65,000 entities.

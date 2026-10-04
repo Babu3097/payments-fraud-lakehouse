@@ -85,7 +85,12 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   uploaded to `/Volumes/workspace/bronze/landing/paysim/` and verified (493,534,783 bytes; Databricks
   reads 6,362,620 rows, 8,213 fraud, 16 flagged, step 1 to 743, all equal to the local profile).
   Time anchor: step 1 = 2026-08-20 00:00 (ADR-008), so the generator starts at 2026-09-20.
-  Next: generator (injected defects, persistent customer population, SCD2 change feed; decide the
-  population size first), bank-holidays pull job, minimal bundle, Auto Loader bronze pipeline,
-  incremental and idempotency proof, reconcile bronze counts to the source file.
+  Generator done (`src/payments_lakehouse/generator.py`, `docs/generator.md`, ADR-010): 11 tests
+  pass, 14 days generated locally in `data/generated/` (not uploaded yet): 560,000 unique events,
+  69,225 profile rows. Decided: SCD2 for generator customers only (about 60k + 5k merchants), 40k
+  rows a day with documented defects, `channel` field from 2026-09-28.
+  Upload plan: batch 1 (20 to 23 Sep), batch 2 (24, 26, 27 Sep, skipping 25), batch 3 (the late
+  25 Sep file plus 28 Sep onwards), so the pipeline meets late data and the schema change.
+  Next: bank-holidays pull job, minimal bundle, Auto Loader bronze pipeline, incremental and
+  idempotency proof, reconcile bronze counts to the source files and manifests.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.

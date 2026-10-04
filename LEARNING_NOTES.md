@@ -65,3 +65,30 @@ makes it stick for interviews.
 ### Testing the guards
 - A check that has never failed is not proven. I planted an unused import, messy SQL, a fake
   private-key header and a 1 MB file, watched each hook reject them, then deleted them.
+
+## Phase 2: bronze and the data
+
+### Profile the data before designing anything
+- Scanning the real PaySim file changed three decisions: it is perfectly clean (so I must inject my
+  own defects), its volume is very uneven (so the time anchor moved to 20 Aug), and its built-in
+  fraud flag catches only 16 of 8,213 fraud rows (so the derived approval rate is nearly 100%).
+- Two independent tools (a Python scan and Databricks SQL) gave the same counts. That is a
+  reconciliation.
+
+### What a landing zone and bronze are for
+- The landing volume holds files exactly as received. Bronze is raw, append-only Delta that can be
+  replayed. If silver has a bug, fix it and rebuild from bronze without refetching the sources.
+- Free Edition runs only serverless compute, allows one active pipeline per type, and restricts
+  outbound internet to trusted domains. I tested that gov.uk is reachable before designing around it.
+
+### A deterministic generator makes everything else testable
+- Seeding each day from (seed, date) means regenerating a day gives identical files. That makes a
+  rerun idempotent and lets tests assert exact counts.
+- Files are written to a temp name and then renamed, so a half-written file is never picked up.
+- Injecting defects onto disjoint rows, plus a manifest of what was injected, makes data quality
+  provable: silver's quarantine count has to equal the manifest.
+- A deliberate schema change (a new `channel` field from 28 Sep) is how I test schema evolution.
+
+### Testing the tests
+- Passing tests can still be weak. I broke the generator on purpose five ways in a scratch copy and
+  confirmed each break was caught by exactly the test meant to catch it.
