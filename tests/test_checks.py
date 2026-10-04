@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 
 from payments_lakehouse.checks import (
@@ -80,3 +82,14 @@ def test_an_all_passing_report_has_no_failure_lines(tmp_path):
     results = run_suite(path, lambda sql: [("a", 1, 1, True), ("b", 2, 2, "true")])
     assert failures(results) == []
     assert format_report(results) == "2 of 2 checks passed"
+
+
+def test_whole_numbers_print_without_decimals_but_real_decimals_keep_them(tmp_path):
+    path = write_suite(tmp_path, "gold_reconciliation.sql")
+    rows = [
+        ("count", Decimal("1097.00"), Decimal("1096.00"), False),
+        ("sum", Decimal("12.50"), 3, False),
+    ]
+    report = format_report(run_suite(path, lambda sql: rows))
+    assert "count: expected 1097, actual 1096" in report
+    assert "sum: expected 12.50, actual 3" in report

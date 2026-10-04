@@ -8,6 +8,7 @@ email. The logic is plain Python, so it is tested without Spark; only `main` nee
 import argparse
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 # SQL text in, rows out. In the job this is `lambda sql: spark.sql(sql).collect()`.
@@ -51,6 +52,13 @@ def run_all(directory: Path, execute: Executor) -> list[CheckResult]:
     return results
 
 
+def _plain(value: object) -> str:
+    # The SQL widens whole numbers to decimals, so a count would print as "1097.00".
+    if isinstance(value, Decimal) and value == value.to_integral_value():
+        return str(int(value))
+    return str(value)
+
+
 def failures(results: list[CheckResult]) -> list[CheckResult]:
     return [r for r in results if not r.passed]
 
@@ -59,7 +67,9 @@ def format_report(results: list[CheckResult]) -> str:
     bad = failures(results)
     lines = [f"{len(results) - len(bad)} of {len(results)} checks passed"]
     for r in bad:
-        lines.append(f"FAILED [{r.suite}] {r.name}: expected {r.expected}, actual {r.actual}")
+        lines.append(
+            f"FAILED [{r.suite}] {r.name}: expected {_plain(r.expected)}, actual {_plain(r.actual)}"
+        )
     return "\n".join(lines)
 
 
