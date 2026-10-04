@@ -82,7 +82,7 @@ The diagram shows the main columns; the tables have a few more (balances, status
 |---|---|---|
 | `fact_transactions` | 6,995,580 | PaySim 6,362,620 plus 632,960 generated |
 | `dim_customer` | 69,880 | 69,879 versions plus the Unknown member; 65,001 are current |
-| `dim_date` | 365 | The calendar year 2026 |
+| `dim_date` | 1,096 | Every day from 2026 to 2028, the years the holiday API covers |
 | `dim_type` | 5 | One row per transaction type |
 
 ### Design decisions that matter
