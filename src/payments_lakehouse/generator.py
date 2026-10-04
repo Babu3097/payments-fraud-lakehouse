@@ -445,7 +445,7 @@ def landing_main(argv: list[str] | None = None) -> None:
         "--today",
         type=date.fromisoformat,
         help="the date that yesterday and today are measured from (default: today in UTC); "
-        "the job passes its own start date, so a repair run on a later day lands the same files",
+        "the job passes its own start date, so the day chosen does not depend on when it runs",
     )
     parser.add_argument("--seed", type=int, default=GeneratorConfig.seed)
     args = parser.parse_args(argv)

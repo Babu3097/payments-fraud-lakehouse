@@ -56,7 +56,7 @@ resources:
               - /Volumes/${var.catalog}/bronze/landing
               - --date
               - "{{job.parameters.run_date}}"
-              # The run's start date (UTC), so a repair run on a later day lands the same files.
+              # The run's start date (UTC), so "yesterday" does not depend on when the task runs.
               - --today
               - "{{job.start_time.iso_date}}"
 
