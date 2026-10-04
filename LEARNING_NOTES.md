@@ -9,9 +9,10 @@ makes it stick for interviews.
 ### Two ways to log in to Databricks
 - A **personal access token** is a long-lived secret string. Handy for scripts, but if it leaks,
   whoever holds it is me until it is revoked.
-- **OAuth** (what `databricks auth login` does) opens the browser, uses my normal login and MFA,
-  and gets a short-lived token that refreshes automatically. I never copy a secret, and it is
-  stored in the macOS keychain.
+- **OAuth** (what `databricks auth login` does) opens the browser, uses my normal login, and gets
+  a short-lived token that refreshes automatically. I never copy a secret, and it is stored in the
+  macOS keychain. Free Edition has no SSO (sign-in is email OTP, Google or Microsoft), so any
+  2-step verification comes from that account.
 - A pipeline in CI cannot click "Authorize", so it needs a **service principal**: a machine
   identity with only the permissions it needs, and its secret kept in GitHub Secrets.
 

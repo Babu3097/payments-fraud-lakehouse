@@ -32,11 +32,14 @@ bottom. Status is one of: Accepted, Open, Superseded.
 - **Status:** Open (CI part still to verify)
 - **Decision:** Humans use OAuth user-to-machine login (`databricks auth login`), with the token
   held in the macOS keychain, not personal access tokens.
-- **Why:** Short-lived tokens that refresh automatically, SSO and MFA apply, and there is no secret
-  to copy-paste or leak.
+- **Why:** Short-lived tokens that refresh automatically, and no secret to copy-paste or leak.
+  Free Edition has no SSO (sign-in is email OTP, Google or Microsoft), so any second factor comes
+  from that identity provider account, for example Google 2-step verification.
 - **Open:** Unattended CI would use a service principal (OAuth machine-to-machine, or OIDC
-  federation from GitHub) with least-privilege grants. We still need to check whether Free
-  Edition supports service principals. If not, CI stays workspace-free (lint and unit tests only).
+  federation from GitHub) with least-privilege grants. The workspace service-principal API
+  responds (the list is empty), but creating one and issuing an OAuth secret is untested, and
+  Free Edition has no account console. We test this in Phase 5 or 6. If it is not possible, CI
+  stays workspace-free (lint and unit tests only).
 
 ## ADR-004: One source of truth for tool versions, same checks in hooks and CI
 
@@ -50,3 +53,61 @@ bottom. Status is one of: Accepted, Open, Superseded.
   enforcement, because hooks can be skipped with `--no-verify`.
 - **Trade-offs:** Hooks need `uv` installed and start slightly slower than isolated hook
   environments.
+
+## ADR-005: One canonical transaction status, with its provenance
+
+- **Status:** Accepted
+- **Context:** PaySim has no approved or declined status, but we report an approval rate.
+- **Decision:** Silver stores `status` (APPROVED or DECLINED) and `status_source`. For PaySim,
+  status is derived: DECLINED when `isFlaggedFraud = 1`, otherwise APPROVED. Generated
+  transactions carry their own status from the generator.
+- **Why:** The KPI is comparable across the whole history, and the provenance column stops a
+  derived value being mistaken for source truth.
+- **Trade-offs:** The PaySim approval rate rests on an assumption, and flagged rows are rare (to
+  be verified on load), so it will sit close to 100%. Dashboards must label it as derived.
+
+## ADR-006: Customer attributes arrive as a change-event feed that builds SCD Type 2
+
+- **Status:** Accepted
+- **Context:** PaySim has no customer attributes, so a slowly changing dimension would have
+  nothing to track.
+- **Decision:** The generator emits `customer_profile_changes` (customer id, segment, region,
+  change timestamp): an initial load plus daily changes. Lakeflow Auto CDC turns them into an SCD
+  Type 2 dimension. The population size is decided after we count PaySim customers.
+- **Why:** Change events are the standard CDC input, and Auto CDC maintains the validity range
+  (`__START_AT`, `__END_AT`) and handles out-of-order events through a sequence column.
+- **Trade-offs:** The attribute values are synthetic and documented as such. Rejected
+  alternative: full daily snapshots, which mean far bigger files and a Python-only API.
+
+## ADR-007: Minimal Asset Bundle from Phase 2
+
+- **Status:** Accepted
+- **Decision:** `databricks.yml` plus one pipeline resource (dev target only) now. Phase 5 adds
+  the job, schedule, alerts and the prod target.
+- **Why:** The pipeline is deployed from Git from day one, so there are no hand-made workspace
+  resources to migrate later.
+- **Trade-offs:** Bundle concepts arrive earlier than the roadmap, and dev mode prefixes
+  resource names with the user.
+
+## ADR-008: Fixed time anchor for PaySim
+
+- **Status:** Accepted (to confirm against max(step) on load)
+- **Decision:** PaySim `step` 1 maps to 2026-08-01 00:00:00, adding one hour per step. The
+  generator continues from 2026-09-01 with one file per day.
+- **Why:** `step` is only a relative hour counter. August 2026 contains the England and Wales
+  summer bank holiday (31 August) and the Scottish one (3 August), so the holiday flag has real hits.
+- **Trade-offs:** The dates are synthetic, and the mapping must be documented wherever dates appear.
+
+## ADR-009: One pipeline for all layers, and the API pull runs inside Databricks
+
+- **Status:** Accepted
+- **Context:** Free Edition allows one active pipeline per pipeline type and restricts outbound
+  internet to trusted domains.
+- **Decision:** A single Lakeflow pipeline holds bronze, silver and gold files, with fully
+  qualified table names (`workspace.<layer>.<table>`). The bank-holidays pull runs as a
+  serverless job task.
+- **Why:** It fits the platform limits, and the API call stays inside the platform like a real
+  system. A one-off serverless run on 2026-10-04 reached gov.uk (HTTP 200, 22,207 bytes, three
+  regions), so the restriction does not block it.
+- **Trade-offs:** If Databricks tightens the allow-list the pull would have to move outside the
+  workspace. A single pipeline would need splitting if the project outgrew Free Edition.
