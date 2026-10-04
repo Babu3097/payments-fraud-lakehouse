@@ -2,12 +2,12 @@
 
 > **Status: draft, to be finalised in Phase 4.** This records the intended gold star schema.
 
-## Source: PaySim (to be verified when loaded in Phase 2)
+## Source: PaySim (profiled on the real file, see [data_profile.md](data_profile.md))
 
 One row per simulated mobile-money transaction. Columns: `step`, `type`, `amount`, `nameOrig`,
 `oldbalanceOrg`, `newbalanceOrig`, `nameDest`, `oldbalanceDest`, `newbalanceDest`, `isFraud`,
-`isFlaggedFraud`. Roughly 6.36 million rows over 30 simulated days, where one `step` is one
-hour. Transaction types: `CASH_IN`, `CASH_OUT`, `DEBIT`, `PAYMENT`, `TRANSFER`.
+`isFlaggedFraud`. 6,362,620 rows over 31 simulated days (`step` 1 to 743, one step is one hour).
+Transaction types: `CASH_IN`, `CASH_OUT`, `DEBIT`, `PAYMENT`, `TRANSFER`.
 
 ## Gold star schema (draft)
 
@@ -63,14 +63,14 @@ erDiagram
 - **Originator and destination both point at `dim_customer`** (a role-playing dimension).
 - **`dim_date.is_uk_bank_holiday`** comes from the GOV.UK bank holidays API.
 
-## Open questions to resolve (decide with the user in Phase 2/3)
+## Resolved and open questions
 
-1. **PaySim has no customer attributes**, so there is nothing to change over time and SCD2
-   would be artificial. Proposal: the generator also emits a customer profile feed (segment,
-   region) whose values change, so SCD2 is genuine.
-2. **PaySim has no approved/declined status**, yet we want an approval rate. Options: the
-   generator adds a `status` field for new data, or we define approval from `isFlaggedFraud`.
-   Either way the definition must be written down here.
+1. **Customer attributes (decided, ADR-006).** PaySim has none, so the generator emits a customer
+   change-event feed that builds the SCD2 dimension. **Still open:** the population size. Covering
+   every PaySim ID means about 9.07M members (6,923,499 customers and 2,150,401 merchants), and the
+   alternative is a bounded subset. We decide at the generator step.
+2. **Approved or declined status (decided, ADR-005).** Derived for PaySim from `isFlaggedFraud`
+   (16 rows, so the rate is almost constant) and supplied by the generator for new days.
 3. **Physical layout:** the gold fact table will be partitioned or clustered, but for a table
    of this size the choice (liquid clustering vs partitioning) is to be confirmed against the
    Databricks documentation and measured in Phase 4.

@@ -42,6 +42,16 @@ ruff and sqlfluff with pre-commit · GitHub Actions
 | `tests/` | pytest unit tests |
 | `docs/` | Architecture, data model, setup guide, runbook, design decisions |
 
+## Data and attribution
+
+Transactions come from the [PaySim dataset](https://www.kaggle.com/datasets/ealaxi/paysim1) by
+Edgar Lopez-Rojas, licensed **CC BY-SA 4.0**. Please cite: E. A. Lopez-Rojas, A. Elmir and
+S. Axelsson, "PaySim: A financial mobile money simulator for fraud detection", 28th European
+Modeling and Simulation Symposium (EMSS), Larnaca, Cyprus, 2016. The data is **not** stored in
+this repository. Bank holiday dates come from the GOV.UK bank holidays API, and everything else is
+synthetic data produced by this project's generator. What we found in the data, and how it shapes
+the pipeline, is in [docs/data_profile.md](docs/data_profile.md).
+
 ## Getting started
 
 Setup steps are in [docs/setup.md](docs/setup.md). Design decisions and their reasons are

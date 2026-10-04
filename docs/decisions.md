@@ -63,8 +63,9 @@ bottom. Status is one of: Accepted, Open, Superseded.
   transactions carry their own status from the generator.
 - **Why:** The KPI is comparable across the whole history, and the provenance column stops a
   derived value being mistaken for source truth.
-- **Trade-offs:** The PaySim approval rate rests on an assumption, and flagged rows are rare (to
-  be verified on load), so it will sit close to 100%. Dashboards must label it as derived.
+- **Trade-offs:** The PaySim approval rate rests on an assumption. Verified on the real file:
+  only 16 of 6,362,620 rows are flagged, so the derived rate is 99.99975% and almost constant.
+  Real variation comes from generated days. Dashboards must label PaySim status as derived.
 
 ## ADR-006: Customer attributes arrive as a change-event feed that builds SCD Type 2
 
@@ -91,12 +92,16 @@ bottom. Status is one of: Accepted, Open, Superseded.
 
 ## ADR-008: Fixed time anchor for PaySim
 
-- **Status:** Accepted (to confirm against max(step) on load)
-- **Decision:** PaySim `step` 1 maps to 2026-08-01 00:00:00, adding one hour per step. The
-  generator continues from 2026-09-01 with one file per day.
-- **Why:** `step` is only a relative hour counter. August 2026 contains the England and Wales
-  summer bank holiday (31 August) and the Scottish one (3 August), so the holiday flag has real hits.
-- **Trade-offs:** The dates are synthetic, and the mapping must be documented wherever dates appear.
+- **Status:** Accepted (revised after profiling the real file)
+- **Decision:** PaySim `step` 1 maps to 2026-08-20 00:00:00, adding one hour per step, so step 743
+  is 2026-09-19 22:00. The generator continues from 2026-09-20 with one file per day.
+- **Why:** `step` is only a relative hour counter (verified range 1 to 743). Profiling showed 93%
+  of rows fall on 14 heavy days and the last day has only 272 rows. With this anchor the England and
+  Wales summer bank holiday (31 August) is day 11, a heavy day with 349k rows, so the holiday flag has
+  real data to show. The first proposal (1 August) put that holiday on day 30 and was rejected.
+- **Trade-offs:** The dates are synthetic, and the mapping must be documented wherever dates
+  appear. The flag uses England and Wales (a region choice to revisit in Phase 4). All three
+  regions stay in bronze.
 
 ## ADR-009: One pipeline for all layers, and the API pull runs inside Databricks
 

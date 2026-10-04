@@ -78,6 +78,13 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   private key and a 1 MB file), CI workflow, docs and 4 ADRs. 22 files pushed to the public repo
   and the first CI run was green in 19 s. Checked against Databricks docs: serverless
   environments 3-6 run Python 3.12.3.
-- **Next (Phase 2, bronze):** first decide how the generator fills two PaySim gaps: no customer
-  attributes (SCD2 would be artificial) and no approved/declined status (see
-  `docs/data_model.md`, open questions). The user downloads PaySim from Kaggle themselves.
+- **Phase 2 (in progress, branch `phase-2-bronze`):** decisions are in ADR-005 to ADR-009.
+  Done: schemas `workspace.bronze/silver/gold`; managed volume `workspace.bronze.landing`
+  (`sql/01_create_landing_volume.sql`); gov.uk is reachable from serverless; PaySim downloaded,
+  verified and profiled (`docs/data_profile.md`, data kept in gitignored `data/raw/paysim/`);
+  upload to `/Volumes/workspace/bronze/landing/paysim/` started.
+  Time anchor: step 1 = 2026-08-20 00:00 (ADR-008), so the generator starts at 2026-09-20.
+  Next: generator (injected defects, persistent customer population, SCD2 change feed; decide the
+  population size first), bank-holidays pull job, minimal bundle, Auto Loader bronze pipeline,
+  incremental and idempotency proof, reconcile bronze counts to the source file.
+- **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.
