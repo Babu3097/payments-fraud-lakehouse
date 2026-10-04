@@ -78,12 +78,17 @@ The diagram shows the main columns; the tables have a few more (balances, status
 
 ### Facts about the model
 
-| Table | Rows (16 generated days, 20 Sep to 5 Oct) | Notes |
+| Table | Rows at the end of Phase 4 (16 generated days, 20 Sep to 5 Oct) | Notes |
 |---|---|---|
 | `fact_transactions` | 6,995,580 | PaySim 6,362,620 plus 632,960 generated |
 | `dim_customer` | 69,880 | 69,879 versions plus the Unknown member; 65,001 are current |
 | `dim_date` | 1,096 | Every day from 2026 to 2028, the years the holiday API covers |
 | `dim_type` | 5 | One row per transaction type |
+
+These are a snapshot. The daily job adds one generated day at a time (40,000 rows less 440 quarantined,
+so 39,560 fact rows, and a few hundred customer versions), which is why most checks compute their
+expected values from the landing files and manifests instead of typing them in. After the first job runs the fact held
+7,035,140 rows (17 days, to 6 Oct).
 
 ### Design decisions that matter
 

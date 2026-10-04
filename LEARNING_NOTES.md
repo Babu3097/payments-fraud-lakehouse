@@ -213,3 +213,83 @@ makes it stick for interviews.
   last line, so the scratch schema was left behind. Cleanup belongs in a `finally` block.
 - A new kind of file (a late file with no manifest) exposed a gap in my own reconciliation. I fixed it by
   checking the late file against the landing folder, not by loosening the check.
+
+## Phase 5: automation
+
+### A job is a schedule plus an ordered set of tasks
+- A **job** is a set of **tasks** with `depends_on` links, so the order is written down and enforced.
+  Mine: generate the day's files and pull the holidays (side by side, because neither needs the
+  other), then refresh the pipeline, then verify. The pipeline cannot start before the files exist,
+  and nothing says "success" before the checks have run.
+- The checks live in their own last task on purpose. The pipeline's own constraints stop one update;
+  `verify` re-checks every layer from the landing files, and its failure is what fails the job.
+
+### Idempotent means a second run changes nothing, and I should prove it
+- Each step has its own reason: the generator skips a file whose bytes already match, the holiday
+  file's name is a hash of its content, Auto Loader remembers the files it read, silver is an upsert on
+  `event_id`, gold is recomputed. Together, a rerun is always safe, so the runbook never has to say
+  "check first".
+- The proof: I re-ran a day that had already landed, and 18 of 19 tables had identical row counts and
+  content hashes. The 19th, `dim_date`, changed because I had extended it on purpose. I also hashed
+  three cloud-written files against my laptop's copies and they matched exactly.
+- **Predict, then verify.** I wrote the expected row counts before the new-day run and 8 of 8 were
+  exact. I was wrong about one thing (see below), and that was the useful part.
+
+### Alerts: on failure, tested, and without my address in Git
+- Alert on failure and on "too slow", not on success, or the signal drowns. A job-level email is sent
+  when the run ends, after the retries, not for each failed attempt.
+- The recipient is a bundle variable that defaults to whoever deploys, so no address is committed.
+- **An alert I have not tested is a guess.** I broke one check on purpose, watched `verify` fail with
+  the check named, and the account owner confirmed the email arrived. Then I reverted (hash identical
+  to the commit) and redeployed.
+
+### Retries: explicit ones, and the ones the platform adds
+- I set one retry after two minutes on the pipeline task, for a transient platform failure.
+- I did not set one on `verify`, yet it ran twice: serverless task compute retries a failed task by
+  itself (auto-optimization). That is only safe because every task is idempotent. For a real data
+  problem a retry just costs a minute.
+
+### Repair run or run now
+- A **repair run** continues a failed run and re-runs only what failed. After my deliberate failure it
+  re-ran `verify` alone, in about a minute, and the same run turned green. A fresh run costs about 8
+  minutes and does not change the answer.
+
+### Which day is "yesterday"?
+- A job needs to know which day to process. If "yesterday" is computed from the wall clock, a task
+  that runs again later gets a different day. Airflow solves this with a logical date. Databricks Jobs
+  have none, so I pass the run's start date into the task and measure "yesterday" from it.
+- I have not yet observed a repair across midnight, so I wrote that down as intent and not as fact.
+- Job parameters are not pushed into a Python-wheel task that takes a list of arguments, so I
+  reference the parameter explicitly. I read that in the docs instead of guessing.
+
+### Deploying is destructive on purpose
+- `bundle deploy` makes the workspace match the repository. It created the new job and deleted the old
+  one, because I had removed its file. That is the point of infrastructure as code, and why I asked
+  before deploying a job with a live schedule.
+- The `prod` target is defined and validated but not deployed, because Free Edition has one workspace
+  and one catalog. I can say why, and what a real one would change.
+
+### A schema change inside a job
+- I predicted (about 60% sure) that the first pipeline update would fail on the new `device_type`
+  column and the job retry would fix it. I was wrong. The platform cancelled the update itself, started
+  a follow-up update with cause `SCHEMA_CHANGE`, and the job task simply waited for it: success on the
+  first attempt after 484 s instead of 292 s. The retry was not needed.
+- Bronze took the new column and silver and gold ignored it, which is the design: bronze never loses
+  data, and the layers with a contract change only by review.
+
+### Time bombs
+- My calendar table only covered 2026. A one-off pipeline would never notice, but a job that runs
+  every day fails on 1 January 2027 and keeps failing. A fixed range in a scheduled job is a bug with
+  a date on it. I found it by asking "what happens when this runs for a year", and a strict check
+  would have made it loud instead of silent. The same limit now sits at the end of 2028, written in
+  the runbook.
+
+### Small lessons
+- A failed multi-task run is reported by the API as `INTERNAL_ERROR` with result `FAILED`; the UI says
+  Failed.
+- My failure message said `expected 1097.00`, because SQL widened a count to a decimal. The line a
+  person reads at 6am should be clean, so I fixed it and added a test.
+- I nearly wrote "a cancelled run is not a failure" in the runbook. The docs say the opposite by
+  default. When I cannot test a claim, I check the docs before it goes in a runbook.
+- My helper scripts run on the system Python 3.9, which has no `datetime.UTC`. `DESCRIBE` cannot be a
+  subquery, so I read column lists from `information_schema` instead.

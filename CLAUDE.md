@@ -50,6 +50,9 @@ uv sync                              # install pinned deps into .venv
 uv run pytest                        # unit tests
 uv run pre-commit run --all-files    # ruff + sqlfluff + hygiene hooks (same as CI)
 databricks current-user me           # confirm Databricks login (profile DEFAULT)
+databricks bundle validate --strict -t dev   # check the bundle YAML (prod validates too, never deploy it)
+databricks bundle deploy -t dev      # builds the wheel; the daily schedule is LIVE after this
+databricks bundle run payments_lakehouse_daily -t dev [--params run_date=YYYY-MM-DD] [--only verify]
 ```
 
 ## Conventions
@@ -118,7 +121,7 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   Next: push the branch and open the PR (ask first), Phase 3 interview questions, wait for the
   user's OK before Phase 4 (gold).
 - **Phase 3 is merged (PR 2).** Phase 4 follows.
-- **Phase 4 (built and verified on branch `phase-4-gold`, PR pending):** decisions in ADR-017 to
+- **Phase 4 (done, merged in PR 3):** decisions in ADR-017 to
   ADR-020. `pipelines/gold/` is deployed: `dim_date` (3 regions), `dim_type`, `dim_customer` (Auto
   CDC SCD2 into a private `customer_history`, hash keys, Unknown member), `fact_transactions`
   (point-in-time join, rule flags, `CLUSTER BY (date_key, type_key)`), four KPI views,
@@ -130,6 +133,29 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   keys and left 6,955,610 other rows identical. 66 checks pass (19 bronze, 25 silver, 22 gold), 29
   gold expectations 0 failed (read with `event_log()` SQL). Generated data now spans 20 Sep to 5 Oct
   (16 days) plus `customer_profile_2026-09-25_late.csv` (4 late events; bronze checks account for
-  `*_late.csv`). The layout experiment is in ADR-018. Next: PR (ask first), interview questions,
-  Phase 5 only after the user's OK.
+  `*_late.csv`). The layout experiment is in ADR-018.
+- **Phase 5 (built and verified on branch `phase-5-automate`, PR pending):** decisions in ADR-021 to
+  ADR-024 (ADR-007 and ADR-012 updated). `resources/daily.job.yml` is deployed as `[dev <user>]
+  payments_lakehouse_daily` (job id 53886104526697): `generate_daily_files` + `pull_holidays` then
+  `refresh_pipeline` (1 retry after 2 min) then `verify` (66 checks, fails the job). 06:00
+  Europe/London, **UNPAUSED (live)**, failure and 30-minute duration emails to the deploying account
+  (bundle variable `alert_email`, never committed), 1 h timeout, 1 run at a time with a queue. New
+  entry points `generate-day` (skips identical files, `--today` anchor) and `run-checks`; feed field
+  `device_type` from 2026-10-06; `dim_date` extended to 2028 (a time bomb on 2027-01-01, ADR-024). The
+  deploy deleted the old `pull_bank_holidays` job. `prod` target validated, not deployed. Proofs on
+  2026-10-04, predictions written first: a rerun of a loaded day left 18 of 19 tables identical
+  (`dim_date` 365 to 1,096 by design) and cloud-written files were sha256-identical to local; a new
+  day (6 Oct, new column) matched 8 of 8 counts and the pipeline task rode through the SCHEMA_CHANGE
+  restart (484 s, no retry used; closes the ADR-012 question; my 60% guess was wrong); a deliberate
+  `verify` failure sent the alert (the user confirmed the email), a repair re-ran only `verify`, and
+  the revert was hash-identical. Finding: serverless auto-optimization retries failed Python tasks
+  (verify ran twice). Landing holds 17 days (20 Sep to 6 Oct), fact 7,035,140 rows, 66 checks pass,
+  45 tests pass. Helper scripts for snapshots live in the session scratchpad, not the repo.
+  **Open follow-ups:** (1) first scheduled run is due 2026-10-05 06:00 London: check the Runs tab
+  (runs on 5, 6 and 7 Oct land 4, 5, 6 Oct unchanged; the 8 Oct run lands 7 Oct, new data). (2) After
+  00:00 UTC test repair across midnight: `databricks jobs repair-run 597513222094068
+  --rerun-tasks generate_daily_files`, then see whether it names 2026-10-03 (the start-date anchor
+  holds) or 2026-10-04 (wall clock); until then docs call it intent. (3) Interview questions Q16 to
+  Q18 for Phase 5; warm-ups A and B and Q13 to Q15 are still open. Next: PR (ask first), then wait
+  for the user's OK before Phase 6.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.
