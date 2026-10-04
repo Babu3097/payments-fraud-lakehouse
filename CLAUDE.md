@@ -144,8 +144,9 @@ databricks bundle run payments_lakehouse_daily -t dev [--params run_date=YYYY-MM
   `device_type` from 2026-10-06; `dim_date` extended to 2028 (a time bomb on 2027-01-01, ADR-024). The
   deploy deleted the old `pull_bank_holidays` job. `prod` target validated, not deployed. Proofs on
   2026-10-04, predictions written first: a rerun of a loaded day left 18 of 19 tables identical
-  (`dim_date` 365 to 1,096 by design) and cloud-written files were sha256-identical to local; a new
-  day (6 Oct, new column) matched 8 of 8 counts and the pipeline task rode through the SCHEMA_CHANGE
+  (`dim_date` 365 to 1,096 by design); a new day (6 Oct, new column) matched 8 of 8 counts, the files
+  the cloud wrote for it were sha256-identical to ones generated on the laptop, and the pipeline task
+  rode through the SCHEMA_CHANGE
   restart (484 s, no retry used; closes the ADR-012 question; my 60% guess was wrong); a deliberate
   `verify` failure sent the alert (the user confirmed the email), a repair re-ran only `verify`, and
   the revert was hash-identical. Finding: serverless auto-optimization retries failed Python tasks

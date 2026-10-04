@@ -230,8 +230,11 @@ makes it stick for interviews.
   `event_id`, gold is recomputed. Together, a rerun is always safe, so the runbook never has to say
   "check first".
 - The proof: I re-ran a day that had already landed, and 18 of 19 tables had identical row counts and
-  content hashes. The 19th, `dim_date`, changed because I had extended it on purpose. I also hashed
-  three cloud-written files against my laptop's copies and they matched exactly.
+  content hashes. The 19th, `dim_date`, changed because I had extended it on purpose. For a new day I
+  hashed the three files the cloud wrote against the same day generated on my laptop, and they matched
+  exactly, so the generator is deterministic across machines. (My first check, on the rerun day, was
+  weaker than I thought: the cloud wrote nothing that day, so it only showed the uploaded copies equal
+  my local ones.)
 - **Predict, then verify.** I wrote the expected row counts before the new-day run and 8 of 8 were
   exact. I was wrong about one thing (see below), and that was the useful part.
 

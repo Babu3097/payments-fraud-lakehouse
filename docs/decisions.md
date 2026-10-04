@@ -362,10 +362,12 @@ bottom. Status is one of: Accepted, Open, Superseded.
   intent but has not been observed yet.
 - **Evidence:** (1) A run for an already-landed day: all three generated files and the holiday file
   said `unchanged`, and 18 of 19 tables were identical in row count and content hash. Only `dim_date`
-  changed, from 365 to 1,096 rows, which was the intended change. (2) The three files the cloud wrote
-  were hashed against the copies made on the laptop: identical sha256, including the 12.8 MB
-  transactions file, so the generator is deterministic across machines. (3) A new day with a new
-  column: 8 of 8 predicted row counts were exact. (4) After a failure, a repair re-ran only `verify`.
+  changed, from 365 to 1,096 rows, which was the intended change. For that day the cloud run found
+  the landed files already identical and wrote nothing. (2) The three files the cloud did write, for
+  6 October, were hashed against the same day generated on the laptop: identical sha256, including the
+  13.7 MB transactions file, so the generator is deterministic across machines (Linux serverless and
+  macOS, both Python 3.12). (3) A new day with a new column: 8 of 8 predicted row counts were exact.
+  (4) After a failure, a repair re-ran only `verify`.
 - **Why:** Jobs fail and get rerun by a tired person at 7am. If a rerun can duplicate or change data,
   the runbook has to say "check first". If it cannot, the answer is always "just rerun".
 - **Trade-offs:** The skip compares bytes, so a change to the generator's code would overwrite an
