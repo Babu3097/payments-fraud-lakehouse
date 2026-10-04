@@ -196,6 +196,22 @@ bottom. Status is one of: Accepted, Open, Superseded.
   The static side of a stream-static join is read when each micro-batch starts, so a holiday added
   later does not retroactively change rows already written.
 
+## ADR-016: Every table is replayable from the landing files
+
+- **Status:** Accepted (verified 2026-10-04)
+- **Decision:** The landing volume is the system of record for raw files. Files are never edited or
+  deleted, and every table is a function of them, so any table can be rebuilt with a full refresh.
+- **Evidence:** A full refresh of every table finished in 1 min 45 s. All eight tables came back with
+  identical row counts and identical fingerprints over their business columns, the audit timestamps
+  were new (the rows were really recomputed), and all 43 reconciliation checks passed again.
+- **Why:** If a silver rule has a bug, we fix the rule and rebuild, without refetching any source.
+  That is the practical meaning of "bronze is raw and replayable".
+- **Trade-offs:** A full refresh reprocesses everything and resets streaming state, which is cheap at
+  7 million rows but would not be at billions. Audit columns (`_ingested_at`, `quarantined_at`)
+  change on a rebuild, so they must never be used as business keys. Production would also need a
+  retention policy for the landing files. On a rebuild every file is read at once, so a column added
+  later (`channel`) is known from the start and no schema-change restart happens.
+
 ## ADR-010: A deterministic generator with a manifest as ground truth
 
 - **Status:** Accepted

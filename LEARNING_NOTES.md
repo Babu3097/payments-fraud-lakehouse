@@ -130,3 +130,35 @@ makes it stick for interviews.
 ### Testing the tests
 - Passing tests can still be weak. I broke the generator on purpose five ways in a scratch copy and
   confirmed each break was caught by exactly the test meant to catch it.
+
+## Phase 3: silver
+
+### Silver, quarantine and expectations
+- Bronze is raw. Silver has one schema for every source, the right types, and one row per event.
+- A **quarantine table** keeps every rejected row with a reason code and its original values.
+  `ON VIOLATION DROP ROW` would lose them silently. The cost is real, though: 17 fraud events sat in
+  quarantine because they also had a defect, so quarantine can hide important rows and needs monitoring.
+- An expectation can warn (measure only), drop the row, or fail the update. I used `FAIL UPDATE` for
+  invariants that must never reach gold, as a safety net behind the split. There are 21 expectations
+  and all passed with 0 failures.
+
+### Deduplication with Auto CDC
+- An Auto CDC (SCD Type 1) upsert keyed on `event_id` makes a duplicated or replayed event update the
+  same row, so it is idempotent and needs no unbounded streaming state. The price is that the table
+  is no longer append-only.
+
+### Proving it
+- Predict, then verify: every prediction was exact (6,916,460 silver rows, 6,160 quarantined, 5,600
+  duplicates removed, 280 holidays, and +39,560 / +440 for a new day).
+- A **content fingerprint** (a hash over every business column of every row) shows "nothing changed"
+  better than a row count. A rerun with nothing new left all 8 tables identical, and refreshing one
+  table changed only that table. Hash functions skip NULLs, and summing 64-bit hashes overflows in strict
+  arithmetic mode, so I summed them as wide decimals.
+- Every rule in silver has a reason code that reconciles with the manifests, so quality is proven
+  to the row and not only claimed.
+
+### Small lessons
+- sqlfluff's Databricks dialect parses Lakeflow SQL. Two lines cannot comply by nature (a long
+  schema string, a deliberate `SELECT *`), so they carry an explained `noqa`.
+- A validate-only update checks the SQL without processing data, which is the cheap way to find mistakes.
+- `to_json` drops null fields by default. A quarantine row should show *which* field was null.

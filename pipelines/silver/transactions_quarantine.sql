@@ -29,7 +29,9 @@ SELECT
             decline_reason,
             is_fraud,
             channel
-        )
+        ),
+        -- Keep null fields in the JSON, so a steward can see which field was missing.
+        map('ignoreNullFields', 'false')
     ) AS raw_record
 FROM STREAM (transactions_unified)
 WHERE size(failed_checks) > 0;

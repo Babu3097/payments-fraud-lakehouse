@@ -105,10 +105,16 @@ databricks current-user me           # confirm Databricks login (profile DEFAULT
   Next: deploy that hardening and rerun (expect 0 new rows), push the branch and open the PR
   (ask first), Phase 2 interview questions, then wait for the user's OK before Phase 3.
 - **Phase 2 (done, merged in PR 1):** see above. Bronze is deployed and verified.
-- **Phase 3 (in progress, branch `phase-3-silver`):** decisions in ADR-013 to ADR-015. Written and
-  lint-clean, not yet deployed: `pipelines/silver/` (`transactions_unified` private working table
-  with two flows, `transactions` via Auto CDC SCD1, `transactions_quarantine`,
-  `customer_profile_events`, `bank_holidays`) and `sql/checks/silver_reconciliation.sql`.
-  Predictions to verify: silver 6,916,460 rows, quarantine 6,160, duplicates removed 5,600,
-  holidays 280. Next: deploy, dry-run validate, run, verify against the manifests.
+- **Phase 3 (built and verified on branch `phase-3-silver`, PR pending):** decisions in ADR-013 to
+  ADR-016. `pipelines/silver/` is deployed: private `transactions_unified` (two flows),
+  `transactions` via Auto CDC SCD1 on `event_id`, `transactions_quarantine` (reason codes, null
+  fields explicit), `customer_profile_events`, `bank_holidays`. First run 1 min 54 s and every
+  prediction exact (6,916,460 silver, 6,160 quarantined, 5,600 duplicates removed, 280 holidays).
+  A rerun with nothing new left all 8 tables identical (content fingerprints); a new day (4 Oct)
+  gave +39,560 silver and +440 quarantine; a full refresh rebuilt every table in 1 min 45 s with
+  identical content. 43 reconciliation checks pass (25 silver, 18 bronze) and 21 expectations all
+  show 0 failed. Finding: 17 fraud events sit in quarantine (see runbook). Generated data now
+  spans 20 Sep to 4 Oct (15 days, files in the gitignored `data/generated/`).
+  Next: push the branch and open the PR (ask first), Phase 3 interview questions, wait for the
+  user's OK before Phase 4 (gold).
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.
