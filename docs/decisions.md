@@ -463,3 +463,7 @@ bottom. Status is one of: Accepted, Open, Superseded.
   Recording is best-effort: a failed write must not hide a failed check or turn a passing run red, so
   a silent gap in history is possible and shows as a missing day. The event log query only runs on
   Databricks, so it is proven in the platform and not by a local test.
+- **Proof (2026-10-05, prediction written first):** after deploying the three SQL fixes, a full refresh
+  of the whole pipeline left all 19 tables identical in rows and content fingerprints, and `verify`
+  passed 67 of 67. The same run filled `workspace.quality` on its first attempt: 67 check rows and 54
+  expectation rows from one update, none failing. The `event_log()` query worked unchanged.

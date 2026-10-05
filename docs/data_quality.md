@@ -6,7 +6,7 @@ the platform, and the first is only about the code.
 | Level | What it checks | Where it runs | Fails the job? |
 |---|---|---|---|
 | Tests (about 400) | The code and the pipeline SQL logic, on small fixtures | Laptop and CI | Blocks nothing (see ADR-025) |
-| Expectations (29 in gold, 21 in silver) | Each row, as the pipeline writes it | Inside the pipeline | Only the `FAIL UPDATE` ones |
+| Expectations (54 across the pipeline) | Each row, as the pipeline writes it | Inside the pipeline | Only the `FAIL UPDATE` ones |
 | Reconciliation (67 checks) | Table against table: counts, sums, keys | `verify` task, after the pipeline | Yes, any false check |
 | Summary | History of the two levels above | `workspace.quality` | No, it only reports |
 
