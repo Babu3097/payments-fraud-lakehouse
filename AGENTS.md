@@ -1,4 +1,4 @@
-# CLAUDE.md: project memory
+# AGENTS.md: project memory
 
 Read this first in every session. Keep the **Progress log** at the bottom up to date.
 
@@ -9,7 +9,7 @@ daily-file generator plus the GOV.UK bank holidays API, processed incrementally 
 bronze, silver and gold (star schema) and surfaced in Power BI and an AI/BI dashboard. It is a
 portfolio project for moving from data analytics/BI into UK data engineering.
 
-## Working agreement (how Claude should behave)
+## Working agreement (how Codex should behave)
 
 - **Role:** senior data engineer mentor and pair programmer. The user must be able to explain
   and defend every design decision in an interview.
@@ -20,11 +20,11 @@ portfolio project for moving from data analytics/BI into UK data engineering.
 - The user does all **sign-ups, logins and passwords**. Never enter or handle credentials.
 - **Free tier only.** Warn before anything that could cost money.
 - The user is an experienced analyst (SQL, Python, Power BI, DAX, star schema): skip those
-  basics. They are new to the terminal, Git, Claude Code and the Databricks CLI: explain simply.
+  basics. They are new to the terminal, Git, Codex and the Databricks CLI: explain simply.
 - Work **one phase at a time** and wait for the user's OK between phases. After each phase ask
   3 interview-style questions, and correct the answers honestly.
 - No tutorial copy-paste: every file must be written for this project and explainable.
-- Use the user's own browser preference: the built-in **Claude browser pane** for web tasks.
+- Use the user's own browser preference: the built-in **Codex browser pane** for web tasks.
 
 ## Phases
 
@@ -70,7 +70,7 @@ databricks bundle run payments_lakehouse_daily -t dev [--params run_date=YYYY-MM
   `~/.npm-global/bin`. A terminal tab opened before PATH edits will not see them.
 - Databricks CLI profile `DEFAULT` (OAuth, token in the keychain). Host lives only in
   `~/.databrickscfg`. Free Edition has a `workspace` catalog and a serverless starter warehouse.
-- The Databricks AI Tools plugin is installed at project scope (`.claude/settings.json`).
+- The Databricks AI Tools plugin is installed at project scope (`.Codex/settings.json`).
 
 ## Progress log
 
@@ -160,7 +160,7 @@ databricks bundle run payments_lakehouse_daily -t dev [--params run_date=YYYY-MM
   Q18 for Phase 5; warm-ups A and B and Q13 to Q15 are still open. Next: PR (ask first), then wait
   for the user's OK before Phase 6.
 - **Phase 5 is merged (PR 4).**
-- **Phase 6 (done, merged in PR 5):** decisions in
+- **Phase 6 (built locally on branch `phase-6-quality`, NOTHING PUSHED OR DEPLOYED):** decisions in
   ADR-025 to ADR-027. Done: about 400 tests (240 SQL in local PySpark with Temurin 17 in
   ~/.local/jdk-17, 168 other, 99% coverage, floor 95); three silver findings fixed in the SQL (the
   full SQL suite passed in 188 s); a 10-mutation round (9 killed, 1 equivalent mutant, in ADR-025);
@@ -169,13 +169,14 @@ databricks bundle run payments_lakehouse_daily -t dev [--params run_date=YYYY-MM
   verify task parameters, `docs/data_quality.md`, `tests/sql/test_quality_views.py`).
   Proven in the platform on 2026-10-05: bundle deployed to dev; a full refresh left all 19 tables
   identical (fingerprints); `verify` passed 67 of 67 and filled `workspace.quality` (67 check rows,
-  54 expectation rows). The scheduled run on 5 Oct succeeded. Still open: the 2026-10-06 06:00 run is
-  the first scheduled one with the new `verify`: check it; Phase 6 interview questions (Q16 to Q18
-  from Phase 5 also unanswered); Phase 5 follow-up 2 (repair across midnight UTC).
+  54 expectation rows). The scheduled run on 5 Oct succeeded. NOT DONE: push the branch and open the
+  PR (ask first); the 2026-10-06 06:00 run is the first scheduled one with the new `verify`: check
+  it; Phase 6 interview questions (Q16 to Q18 from Phase 5 also unanswered); Phase 5 follow-up 2
+  (repair across midnight UTC).
   Gotchas: macOS allows only 1333 threads per user, so the SQL tests cap Spark's threads and
   checkpoint each table; run `uv run pytest -m sql` for Spark tests and `-m "not sql"` for the rest;
   saved tables outlive a Spark test, so tests drop them first; macOS has no `timeout` command.
-- **Phase 7 (done, merged in PR 6):**
+- **Phase 7 (built on branch `phase-7-reporting`, stacked on phase-6, PR pending merge of PR 5):**
   decisions in ADR-028. `dashboards/build_dashboard.py` writes `fraud_monitoring.lvdash.json` (one
   page, four datasets, measures, source filter defaulting to generator-v1); resource
   `resources/fraud_monitoring.dashboard.yml` with a warehouse looked up by name (variable
