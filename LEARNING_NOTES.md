@@ -314,3 +314,21 @@ makes it stick for interviews.
 - Local Spark has no `event_log()`, Auto CDC or enforcement of pipeline expectations, so those stay
   proven in the platform. Saved tables outlive a test in a shared Spark warehouse, so tests that save
   tables must drop them first.
+
+## Phase 7: reporting
+
+- **A dashboard should add no logic.** It reads the gold KPI views, so it cannot disagree with them.
+  I defined each ratio once as a dataset measure (sum of the numerator over the sum of the
+  denominator). Averaging a stored rate is wrong as soon as a filter changes the mix.
+- **Generate what is repetitive, test what is generated.** The dashboard JSON is long and shaped the
+  same way for every widget, so a short script writes it and a test checks that every field exists,
+  the grid has no gaps and the versions are valid. A workspace only shows these mistakes as a broken tile.
+- **Pick the honest default.** The source filter starts on the generated feed because PaySim's daily
+  trend is a simulation artifact. A default view is a claim about what matters.
+- **A filter only reaches datasets that have its column.** The date filter moves the daily panels and
+  not the by-type panels, because their tables have no date. The page says so.
+- **Power BI role-playing dimension:** one relationship to `dim_customer` is active (the sender), the
+  other is inactive and switched on inside a measure with `USERELATIONSHIP`. SCD2 means the fact
+  already holds the customer version valid at event time.
+- **Licence honesty:** the GOV.UK JSON has no licence statement; GOV.UK says most of its content is
+  under the Open Government Licence v3.0. The README says exactly that and no more.

@@ -176,4 +176,13 @@ databricks bundle run payments_lakehouse_daily -t dev [--params run_date=YYYY-MM
   Gotchas: macOS allows only 1333 threads per user, so the SQL tests cap Spark's threads and
   checkpoint each table; run `uv run pytest -m sql` for Spark tests and `-m "not sql"` for the rest;
   saved tables outlive a Spark test, so tests drop them first; macOS has no `timeout` command.
-- **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.
+- **Phase 7 (built on branch `phase-7-reporting`, stacked on phase-6, PR pending merge of PR 5):**
+  decisions in ADR-028. `dashboards/build_dashboard.py` writes `fraud_monitoring.lvdash.json` (one
+  page, four datasets, measures, source filter defaulting to generator-v1); resource
+  `resources/fraud_monitoring.dashboard.yml` with a warehouse looked up by name (variable
+  `warehouse_id`); deployed to dev with the bundle, not yet seen rendered (needs the user's login).
+  `docs/reporting.md` has the Power BI connection, model, DAX and pages (not run in Power BI Desktop).
+  Final README written; GOV.UK licence wording settled (OGL v3.0 stated for the site, none in the
+  JSON). 431 tests pass. Repo has no LICENSE file: the user must choose one. Remaining: look at the
+  dashboard once; build the .pbix on a Windows machine; Phase 5 follow-up 2; interview questions
+  (Q16 to Q18 and Phase 6 and 7); check the 6 Oct 06:00 run.

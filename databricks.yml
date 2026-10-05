@@ -18,6 +18,10 @@ variables:
   catalog:
     description: Unity Catalog catalog that holds the bronze, silver and gold schemas
     default: workspace
+  warehouse_id:
+    description: SQL warehouse that runs the dashboard's queries, found by name so no id is committed
+    lookup:
+      warehouse: Serverless Starter Warehouse
   alert_email:
     description: >-
       Who gets the failure alert. It defaults to the account that deploys, filled in at deploy
