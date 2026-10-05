@@ -26,3 +26,8 @@ data/
 
 # Personal prep notes (interview answers, CV drafts): kept on this Mac only
 private/
+
+# Coverage output
+.coverage
+.coverage.*
+htmlcov/

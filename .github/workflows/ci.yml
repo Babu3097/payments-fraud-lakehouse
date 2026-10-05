@@ -14,7 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-and-test:
+  # Three jobs so a failure names its kind at a glance and the slow one runs in parallel.
+  lint:
     # Pinned, not "ubuntu-latest", so the OS image only changes when we choose (ADR-004).
     runs-on: ubuntu-24.04
     steps:
@@ -25,12 +26,47 @@ jobs:
           enable-cache: true
 
       # --locked fails the build if uv.lock is out of date with pyproject.toml.
+      # --no-group sql: linting does not need the 300 MB PySpark download.
       - name: Install pinned dependencies
-        run: uv sync --locked
+        run: uv sync --locked --no-group sql
 
       # The very same hooks developers run on `git commit` (ruff, sqlfluff, hygiene checks).
       - name: Lint
         run: uv run pre-commit run --all-files --show-diff-on-failure
 
-      - name: Unit tests
-        run: uv run pytest
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Install pinned dependencies
+        run: uv sync --locked --no-group sql
+
+      # Everything that does not need Spark, with a coverage floor (ADR-025).
+      - name: Unit tests with coverage
+        run: uv run pytest -m "not sql" --cov --cov-report=term-missing
+
+  sql:
+    # Runs the pipeline SQL in a local Spark session (ADR-025). Slower, so a separate job.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Install pinned dependencies including PySpark
+        run: uv sync --locked --group sql
+
+      - name: SQL tests
+        run: uv run pytest -m sql

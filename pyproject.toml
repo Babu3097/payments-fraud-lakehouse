@@ -40,6 +40,15 @@ markers = [
     "sql: runs the pipeline SQL in a local Spark session (needs Java 17+ and the sql dependency group)",
 ]
 
+[tool.coverage.run]
+source = ["payments_lakehouse"]
+
+[tool.coverage.report]
+# Measured at 99% on 2026-10-05; the gate sits lower so one untested branch does not fail CI,
+# but a whole untested module does (ADR-025).
+fail_under = 95
+exclude_also = ["if __name__ == .__main__.:"]
+
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.2",
