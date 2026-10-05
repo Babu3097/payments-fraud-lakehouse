@@ -467,3 +467,24 @@ bottom. Status is one of: Accepted, Open, Superseded.
   of the whole pipeline left all 19 tables identical in rows and content fingerprints, and `verify`
   passed 67 of 67. The same run filled `workspace.quality` on its first attempt: 67 check rows and 54
   expectation rows from one update, none failing. The `event_log()` query worked unchanged.
+
+## ADR-028: One-page dashboard over the KPI views, built from code; Power BI as a documented model
+
+- **Status:** Accepted
+- **Decision:** The AI/BI dashboard is a single page over four datasets, one per gold KPI view. Its JSON
+  is written by `dashboards/build_dashboard.py`, committed, and deployed by the same bundle as the
+  pipeline and job. Ratios are dataset measures. The source filter defaults to `generator-v1`. Power
+  BI is documented (connection, relationships, DAX measures, page layout) in `docs/reporting.md`.
+- **Why:** The KPI views already hold the answers, so the dashboard adds no new logic and cannot
+  disagree with gold. Generating the JSON keeps repeated widget shapes in one place and lets
+  `tests/test_dashboard.py` check what the workspace would only reveal as a broken tile (a field
+  that does not exist, an overlapping grid, a wrong widget version). Measures keep a rate correct
+  under filtering, where averaging a stored rate would not be. The default source avoids showing
+  PaySim's artifact trend as if it were news.
+- **Trade-offs:** The type, hour and rule views have no date column, so the date filter only moves the
+  daily panels, and the page says so. The generated JSON is long and nobody should edit it by hand.
+  The quality history in `workspace.quality` is not on the dashboard, because its queries must use
+  bare table names from one schema. No `.pbix` is committed (it is binary and cannot be reviewed in a
+  diff), so the Power BI side is a guide that I could not run on this Mac. The dashboard was accepted
+  by the workspace, but I have not looked at it rendered, because the workspace needs a login that only
+  the account owner can do.

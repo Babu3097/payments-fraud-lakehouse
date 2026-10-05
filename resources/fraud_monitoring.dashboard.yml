@@ -1,0 +1,11 @@
+# The AI/BI dashboard over the gold KPI views (ADR-028). The JSON is built by
+# dashboards/build_dashboard.py and committed, because this file deploys that JSON as it is.
+resources:
+  dashboards:
+    fraud_monitoring:
+      display_name: Payments fraud monitoring
+      file_path: ../dashboards/fraud_monitoring.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      # The dataset queries use bare table names; these two say where they live.
+      dataset_catalog: ${var.catalog}
+      dataset_schema: gold

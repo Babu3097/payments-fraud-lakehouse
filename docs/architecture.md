@@ -5,7 +5,7 @@
 > transactions, see [silver.md](silver.md); Phase 4: a star schema with an SCD2 customer dimension,
 > KPI tables and a reconciliation that fails the run, see [data_model.md](data_model.md) and
 > [kpis.md](kpis.md)). Phase 5 added the daily job, its failure alerts and the deploy-as-code bundle
-> (see below and [airflow.md](airflow.md)). 66 checks pass on every run. The BI layer is still planned.
+> (see below and [airflow.md](airflow.md)). 67 checks pass on every run. Phase 6 added the tests, the CI split and the data quality history; Phase 7 added the AI/BI dashboard and the Power BI guide (see [reporting.md](reporting.md)).
 > Updated at the end of each phase.
 
 ## Data flow
@@ -52,7 +52,7 @@ flowchart LR
     T --> H["pull_holidays<br/>GOV.UK calendar"]
     G --> P["refresh_pipeline<br/>bronze, silver, gold<br/>1 retry after 2 min"]
     H --> P
-    P --> V["verify<br/>66 reconciliation checks"]
+    P --> V["verify<br/>67 reconciliation checks"]
     V -->|"any false check"| F{{"run fails"}}
     P -->|"task fails"| F
     F --> M["email to the deploying account"]
@@ -67,7 +67,7 @@ Operations around the flow:
 - **Alerting:** an email goes to the deploying account when a run fails, and when a run passes 30
   minutes (ADR-022). Tested end to end on 2026-10-04.
 - **Safe to rerun:** every step is idempotent, so a repair or a second run changes nothing (ADR-023).
-- **CI:** GitHub Actions runs lint (ruff, sqlfluff) and pytest on every push.
+- **CI:** GitHub Actions runs three jobs on every push: lint (ruff, sqlfluff, identifier guard), unit tests with a coverage floor, and the SQL tests in local Spark (ADR-025).
 
 ## Layers and what each one guarantees
 
