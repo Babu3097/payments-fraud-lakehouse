@@ -1,5 +1,6 @@
 import sys
 import types
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -8,8 +9,11 @@ from payments_lakehouse.checks import (
     failures,
     format_report,
     main,
+    record,
+    result_rows,
     run_all,
     run_suite,
+    split_statements,
     strip_comments,
 )
 
@@ -104,6 +108,8 @@ class FakeSpark:
     def __init__(self, rows):
         self.rows = rows
         self.sent = []
+        self.frames = []
+        self.saved = []
 
     def sql(self, text):
         self.sent.append(text)
@@ -111,6 +117,22 @@ class FakeSpark:
 
     def collect(self):
         return self.rows
+
+    # What the history writer uses: createDataFrame(rows, schema).write.mode().saveAsTable().
+    def createDataFrame(self, rows, schema):  # noqa: N802 (Spark's own name)
+        self.frames.append((rows, schema))
+        return self
+
+    @property
+    def write(self):
+        return self
+
+    def mode(self, how):
+        self.how = how
+        return self
+
+    def saveAsTable(self, name):  # noqa: N802
+        self.saved.append((name, self.how, self.frames[-1][0]))
 
 
 def use_fake_spark(monkeypatch, rows):
@@ -161,3 +183,68 @@ def test_the_job_command_needs_to_be_told_where_the_checks_are():
     with pytest.raises(SystemExit) as stopped:
         main([])
     assert stopped.value.code == 2  # argparse's own usage error
+
+
+RUN_AT = datetime(2026, 10, 5, 6, 30, tzinfo=UTC)
+
+
+def test_split_statements_drops_comments_and_empty_parts():
+    script = "-- header\nCREATE SCHEMA a;\n\n-- note\nCREATE TABLE b (x INT);\n"
+    assert split_statements(script) == ["CREATE SCHEMA a", "CREATE TABLE b (x INT)"]
+
+
+def test_history_rows_carry_the_run_time_the_run_id_and_plain_numbers(tmp_path):
+    path = write_suite(tmp_path, "gold_reconciliation.sql")
+    results = run_suite(path, lambda sql: [("days", Decimal("1096.00"), 1095, False)])
+    assert result_rows(results, RUN_AT, "77") == [
+        (RUN_AT, "77", "gold_reconciliation", "days", "1096", "1095", False)
+    ]
+
+
+def test_record_sets_up_then_appends_the_checks_and_skips_expectations_without_a_pipeline(tmp_path):
+    (tmp_path / "setup.sql").write_text("-- c\nCREATE SCHEMA s;\nCREATE TABLE t (x INT);")
+    spark = FakeSpark([])
+    results = run_suite(
+        write_suite(tmp_path, "a_reconciliation.sql"), lambda sql: [("n", 1, 1, True)]
+    )
+    record(spark, results, tmp_path, run_id="9", run_at=RUN_AT)
+    assert spark.sent == ["CREATE SCHEMA s", "CREATE TABLE t (x INT)"]
+    assert [(name, how) for name, how, _ in spark.saved] == [
+        ("workspace.quality.check_results", "append")
+    ]
+
+
+def test_record_also_stores_the_expectation_metrics_when_given_a_pipeline_id(tmp_path):
+    (tmp_path / "setup.sql").write_text("CREATE SCHEMA s;")
+    (tmp_path / "expectation_snapshot.sql").write_text(
+        "-- c\nSELECT * FROM event_log('{pipeline_id}')"
+    )
+    spark = FakeSpark([("upd1", "silver.t", "has_id", 10, 2)])
+    record(spark, [], tmp_path, run_id="9", pipeline_id="abc-123", run_at=RUN_AT)
+    assert "SELECT * FROM event_log('abc-123')" in spark.sent
+    name, how, rows = spark.saved[-1]
+    assert name == "workspace.quality.expectation_results"
+    assert rows == [(RUN_AT, "9", "upd1", "silver.t", "has_id", 10, 2)]
+
+
+def test_the_job_records_the_results_before_it_fails_on_a_false_check(tmp_path, monkeypatch):
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    write_suite(checks, "gold_reconciliation.sql")
+    quality = tmp_path / "quality"
+    quality.mkdir()
+    (quality / "setup.sql").write_text("CREATE SCHEMA s;")
+    spark = use_fake_spark(monkeypatch, [("bad", 1, 2, False)])
+    with pytest.raises(SystemExit):
+        main(["--checks-dir", str(checks), "--quality-dir", str(quality), "--run-id", "5"])
+    assert spark.saved and spark.saved[0][0] == "workspace.quality.check_results"
+
+
+def test_a_failure_to_record_is_reported_but_never_hides_the_checks(tmp_path, monkeypatch, capsys):
+    checks = tmp_path / "checks"
+    checks.mkdir()
+    write_suite(checks, "gold_reconciliation.sql")
+    use_fake_spark(monkeypatch, [("ok", 1, 1, True)])
+    # No setup.sql in the quality folder: recording breaks, the passing checks must still pass.
+    main(["--checks-dir", str(checks), "--quality-dir", str(tmp_path / "missing")])
+    assert "WARNING: could not record" in capsys.readouterr().out

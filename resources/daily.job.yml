@@ -90,6 +90,13 @@ resources:
             parameters:
               - --checks-dir
               - ${workspace.file_path}/sql/checks
+              # Append every result to workspace.quality before a failed check fails the task.
+              - --quality-dir
+              - ${workspace.file_path}/sql/quality
+              - --run-id
+              - "{{job.run_id}}"
+              - --pipeline-id
+              - ${resources.pipelines.payments_pipeline.id}
 
       environments:
         - environment_key: default

@@ -403,3 +403,63 @@ bottom. Status is one of: Accepted, Open, Superseded.
 - **Trade-offs:** The data is synthetic, with defect rates and fraud patterns that we chose, so
   the findings describe the pipeline and not the real world. The balances are a per-row snapshot,
   not a ledger. Replaying state costs a little time, which is irrelevant at 65,000 entities.
+
+## ADR-025: Test the pipeline SQL locally, and gate CI on lint, unit and SQL jobs
+
+- **Status:** Accepted
+- **Decision:** The Lakeflow SQL files are read by a small helper and run in a local PySpark session
+  against fixture tables (about 240 tests: silver unify and split, the safety nets, holidays, profile
+  events, gold dimensions, the fact, KPI views, the rule views and the reconciliation gate against 12
+  deliberate corruptions). Python code has a coverage floor of 95% (measured 99%). CI has three
+  parallel jobs: `lint` (pre-commit), `unit` (everything except Spark, with coverage) and `sql`
+  (Java 17 plus PySpark). `main` is not branch-protected, so a red check advises and does not block.
+- **Why:** The logic that can go wrong lives in the SQL, and before this phase it could only be tested
+  by deploying. Local tests give an answer in seconds instead of a two-minute pipeline update, and
+  they run in CI. Writing them found three real defects, all fixed in the SQL: a time-only text used
+  to be accepted as a timestamp (it took the run date), an unknown `status` passed silently (now the
+  quarantine code `UNKNOWN_STATUS`), and a missing `event_id` or `status` needed one reason code
+  (`NULL_REQUIRED_FIELD`). The newest holiday payload is now treated as the whole calendar. Two
+  `QUALIFY` uses became `row_number()` plus a filter, so open-source Spark runs the same text.
+- **Mutation check:** To see whether the tests would notice a wrong rule, ten one-line mutations were
+  applied to the real SQL one at a time (a `>=` made `>`, a band edge moved, a join bound made
+  inclusive and so on). Nine failed the tests as they should. One survived, the sort order inside the
+  holiday de-duplication, and it is an equivalent mutant: the query keeps only the newest payload, so
+  every ranked row has the same timestamp and the order cannot change the result. No test was added
+  for it.
+- **Trade-offs:** Local Spark is not Databricks. Streaming tables, Auto CDC, `event_log()` and
+  expectations' enforcement are platform behaviour, so tests check the SQL logic and the platform
+  proofs (full refresh, reruns, a broken constraint) still carry that part. The SQL job downloads
+  PySpark (about 300 MB) and takes about 3 minutes. Branch protection was considered and declined
+  for this single-author portfolio repo: it adds friction without a second reviewer.
+
+## ADR-026: A commit-time guard for personal identifiers
+
+- **Status:** Accepted
+- **Decision:** A pre-commit hook (`payments_lakehouse.identifier_guard`) rejects a commit that
+  contains a workspace host name or any regular expression listed in the gitignored
+  `private/forbidden_patterns.txt` (the email address, its local part, home paths). It reports file
+  and line number only, never the matched text.
+- **Why:** The repository is public and a leaked identifier stays in history. The earlier safeguard
+  was my own care when reading diffs, which does not scale. A mechanical check is cheap and tested.
+- **Trade-offs:** The personal patterns exist only on this machine, so CI can only apply the built-in
+  host patterns, and a clone without the private file is not protected. Listing the patterns inside
+  the repo would itself be the leak, so this limit is accepted. It does not scan commit messages or
+  the history that is already pushed.
+
+## ADR-027: A data quality summary in its own schema
+
+- **Status:** Accepted
+- **Decision:** The `verify` task appends every reconciliation result to `workspace.quality.check_results`
+  and the latest pipeline update's expectation metrics (read from the event log) to
+  `workspace.quality.expectation_results`. Three views read them: `check_scorecard` (newest run by
+  suite), `check_history` (every run) and `expectation_scorecard` (newest snapshot with a failure rate).
+  The schema, tables and views are created by `sql/quality/setup.sql`, which the task runs each time.
+  Results are written before a failed check fails the task, and a failure to write only prints a
+  warning.
+- **Why:** The checks pass or fail, and then the evidence disappears into a job log. A history lets
+  the dashboard show a trend and lets me say when a check first failed. Putting it in its own schema
+  keeps medallion layers about data and keeps the pipeline from owning tables it does not build.
+- **Trade-offs:** The history is append-only and grows by about 70 rows a day, which is trivial.
+  Recording is best-effort: a failed write must not hide a failed check or turn a passing run red, so
+  a silent gap in history is possible and shows as a missing day. The event log query only runs on
+  Databricks, so it is proven in the platform and not by a local test.

@@ -296,3 +296,21 @@ makes it stick for interviews.
   default. When I cannot test a claim, I check the docs before it goes in a runbook.
 - My helper scripts run on the system Python 3.9, which has no `datetime.UTC`. `DESCRIBE` cannot be a
   subquery, so I read column lists from `information_schema` instead.
+
+## Phase 6: quality
+
+- **Test the logic where it lives.** The risky logic is in the pipeline SQL, so I run the real SQL
+  files in local PySpark on a few fixture rows. Three real defects fell out (a time-only text was
+  accepted as a timestamp, an unknown status passed, one missing field needed one reason code).
+- **Mutation testing, by hand.** A test suite that passes tells you little. Change one operator in
+  the real SQL (`>=` to `>`) and the tests should fail. Nine of ten did. The survivor was an
+  equivalent mutant: a sort order that cannot change the result because only one timestamp is left.
+- **A coverage floor is a tripwire, not a goal.** 95% means a whole untested module fails the build.
+  It says nothing about whether the assertions are good, which is what the mutations check.
+- **Guard what you cannot rely on remembering.** A pre-commit hook stops personal identifiers from
+  reaching a public repo. It reports where, never what, so its own output cannot leak.
+- **Keep the evidence.** Checks that pass or fail and then vanish give no trend. Appending each run
+  to a history table, written before a failing check fails the job, lets a dashboard show quality over time.
+- Local Spark has no `event_log()`, Auto CDC or enforcement of pipeline expectations, so those stay
+  proven in the platform. Saved tables outlive a test in a shared Spark warehouse, so tests that save
+  tables must drop them first.

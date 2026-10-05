@@ -65,5 +65,5 @@ logged in [docs/decisions.md](docs/decisions.md).
 - [x] Phase 3: silver (typing, dedup, expectations, quarantine)
 - [x] Phase 4: gold (star schema, SCD2, KPIs, reconciliation)
 - [x] Phase 5: automation (scheduled job, alerts, Asset Bundle, idempotency)
-- [ ] Phase 6: quality (tests, CI, data quality summary)
+- [x] Phase 6: quality (tests, CI, data quality summary)
 - [ ] Phase 7: reporting (Power BI, dashboard, final README)
