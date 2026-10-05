@@ -31,3 +31,8 @@ repos:
         entry: uv run sqlfluff lint
         language: system
         types: [sql]
+      - id: identifier-guard
+        name: no personal identifiers
+        entry: uv run python -m payments_lakehouse.identifier_guard
+        language: system
+        # Only checks the personal patterns where private/forbidden_patterns.txt exists.

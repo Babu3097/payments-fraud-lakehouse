@@ -159,4 +159,21 @@ databricks bundle run payments_lakehouse_daily -t dev [--params run_date=YYYY-MM
   holds) or 2026-10-04 (wall clock); until then docs call it intent. (3) Interview questions Q16 to
   Q18 for Phase 5; warm-ups A and B and Q13 to Q15 are still open. Next: PR (ask first), then wait
   for the user's OK before Phase 6.
+- **Phase 5 is merged (PR 4).**
+- **Phase 6 (built locally on branch `phase-6-quality`, NOTHING PUSHED OR DEPLOYED):** decisions in
+  ADR-025 to ADR-027. Done: about 400 tests (240 SQL in local PySpark with Temurin 17 in
+  ~/.local/jdk-17, 168 other, 99% coverage, floor 95); three silver findings fixed in the SQL (the
+  full SQL suite passed in 188 s); a 10-mutation round (9 killed, 1 equivalent mutant, in ADR-025);
+  identifier guard hook (patterns in the gitignored private/forbidden_patterns.txt); CI split into
+  lint, unit, sql jobs; the data quality summary written locally (`sql/quality/`, `checks.record`,
+  verify task parameters, `docs/data_quality.md`, `tests/sql/test_quality_views.py`).
+  Proven in the platform on 2026-10-05: bundle deployed to dev; a full refresh left all 19 tables
+  identical (fingerprints); `verify` passed 67 of 67 and filled `workspace.quality` (67 check rows,
+  54 expectation rows). The scheduled run on 5 Oct succeeded. NOT DONE: push the branch and open the
+  PR (ask first); the 2026-10-06 06:00 run is the first scheduled one with the new `verify`: check
+  it; Phase 6 interview questions (Q16 to Q18 from Phase 5 also unanswered); Phase 5 follow-up 2
+  (repair across midnight UTC).
+  Gotchas: macOS allows only 1333 threads per user, so the SQL tests cap Spark's threads and
+  checkpoint each table; run `uv run pytest -m sql` for Spark tests and `-m "not sql"` for the rest;
+  saved tables outlive a Spark test, so tests drop them first; macOS has no `timeout` command.
 - **Reminder for Phase 7:** confirm the GOV.UK data licence wording for the README credit.

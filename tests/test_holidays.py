@@ -3,7 +3,7 @@ import urllib.error
 
 import pytest
 
-from payments_lakehouse.holidays import fetch, landing_name, pull, validate
+from payments_lakehouse.holidays import fetch, landing_name, main, pull, validate
 
 
 def calendar(**overrides):
@@ -140,3 +140,22 @@ def test_fetch_gives_up_after_the_last_attempt():
     with pytest.raises(urllib.error.URLError, match="network down"):
         fetch(attempts=3, opener=opener, sleep=no_sleep)
     assert len(opener.calls) == 3
+
+
+def test_the_entry_point_lands_the_calendar_then_reports_it_unchanged(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr("payments_lakehouse.holidays.fetch", lambda **options: calendar())
+    main(["--dest", str(tmp_path)])
+    assert capsys.readouterr().out.startswith("wrote: ")
+    main(["--dest", str(tmp_path)])
+    assert capsys.readouterr().out.startswith("unchanged: ")
+    assert len(list(tmp_path.iterdir())) == 1
+
+
+def test_the_entry_point_fails_the_task_on_a_payload_silver_could_not_read(tmp_path, monkeypatch):
+    # An exception is what turns the job task red, so a bad payload must raise, not just log.
+    monkeypatch.setattr("payments_lakehouse.holidays.fetch", lambda **options: b"{}")
+    with pytest.raises(ValueError):
+        main(["--dest", str(tmp_path)])
+    assert not list(tmp_path.iterdir())

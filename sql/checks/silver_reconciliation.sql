@@ -107,6 +107,12 @@ checks AS (
     FROM reasons
     UNION ALL
     SELECT
+        'quarantine: UNKNOWN_STATUS rows (the generator injects none)' AS check_name,
+        0 AS expected,
+        count_if(reason = 'UNKNOWN_STATUS') AS actual
+    FROM reasons
+    UNION ALL
+    SELECT
         'quarantine: rows with more than one reason' AS check_name,
         0 AS expected,
         count_if(size(failed_checks) > 1) AS actual
